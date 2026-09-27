@@ -1,0 +1,24 @@
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local Python environments and packaging outputs
+.venv/
+venv/
+.conda/
+build/
+dist/
+*.egg-info/
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Experiment records, videos, and simulator logs
+runs/
+MUJOCO_LOG.TXT

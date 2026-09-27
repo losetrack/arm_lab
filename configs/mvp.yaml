@@ -1,0 +1,29 @@
+# Confirmed M1 development scene; acceptance seeds are not selected here.
+table_size_m: [0.8, 0.8, 0.05]
+table_height_m: 0.8
+friction: [1.0, 0.005, 0.0001]
+cube_side_m: 0.04
+cube_mass_kg: 0.1
+spawn_x_m: [-0.10, 0.10]
+spawn_y_m: [-0.15, -0.05]
+spawn_yaw_deg: [-15.0, 15.0]
+spawn_clearance_m: 0.01
+initial_target_gap_m: 0.03
+target_center_m: [0.10, 0.15]
+target_size_m: [0.12, 0.12]
+grasp_quaternion_xyzw: [0.7071067811865476, 0.7071067811865476, 0.0, 0.0]
+camera_name: agentview
+camera_position_m: [0.5, 0.0, 1.35]
+camera_quaternion_wxyz: [0.653, 0.271, 0.271, 0.653]
+camera_fovy_deg: 45.0  # inherited MuJoCo default, now explicit
+camera_size_px: [256, 256]  # height, width
+camera_hz: 20
+control_hz: 20
+physics_hz: 500
+offscreen_samples: 0
+bottom_tolerance_m: 0.003
+linear_speed_limit_m_s: 0.01
+angular_speed_limit_rad_s: 0.1
+stable_duration_s: 1.0
+episode_timeout_s: 60.0
+development_seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

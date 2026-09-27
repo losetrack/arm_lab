@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vision-arm-lab"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy==1.26.4",
+  "scipy==1.15.3",
+  "robosuite==1.5.2",
+  "mujoco==3.3.0",
+  "h5py==3.16.0",
+  "PyYAML==6.0.3",
+  "opencv-python==4.11.0.86",
+  "imageio-ffmpeg==0.6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = ["integration: runs MuJoCo with offscreen rendering"]
