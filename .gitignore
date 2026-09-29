@@ -30,3 +30,6 @@ MUJOCO_LOG.TXT
 AGENTS.md
 /.agents/
 /.codex/
+
+# VsCode settings
+.vscode/
