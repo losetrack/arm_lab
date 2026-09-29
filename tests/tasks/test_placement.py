@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from vision_arm_lab.config import load_config
+from vision_arm_lab.core.config import load_config
 from vision_arm_lab.tasks.placement import ObjectState, PlacementEvaluator
 
 

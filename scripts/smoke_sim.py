@@ -27,9 +27,9 @@ def main():
 
     options = {}
     if args.t03:
-        from vision_arm_lab.backends.robosuite import adapt_observation, panda_controller_config
-        from vision_arm_lab.contracts import Action, ActionChunk, ActionSpec
-        from vision_arm_lab.control import PandaActionAdapter
+        from vision_arm_lab.simulation.robosuite import adapt_observation, panda_controller_config
+        from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec
+        from vision_arm_lab.simulation.control import PandaActionAdapter
 
         options.update(controller_configs=panda_controller_config(), use_object_obs=False)
         # Diagnostic target: exactly downward, matching the upstream reset yaw.

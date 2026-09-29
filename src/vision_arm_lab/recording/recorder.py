@@ -234,6 +234,10 @@ class Recorder:
             rgb = cv2.resize(camera.rgb, (options.video_size, options.video_size), interpolation=cv2.INTER_AREA)
             self.stream.write(rgb)
 
+    def record_transition(self, transition):
+        """v1 files intentionally retain action + post-step observation semantics."""
+        self.step(transition.action, transition.observation_after)
+
     def end_episode(self, result):
         video_path = None
         if self.stream is not None:

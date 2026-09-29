@@ -9,9 +9,8 @@ from robosuite.utils.camera_utils import (
     get_real_depth_map,
 )
 
-from vision_arm_lab.contracts import CameraObservation, Observation, RobotState
-from vision_arm_lab.control import PandaActionAdapter
-from vision_arm_lab.tasks.placement import ObjectState, PlacementEvaluator
+from vision_arm_lab.core.contracts import CameraObservation, Observation, RobotState
+from vision_arm_lab.simulation.control import PandaActionAdapter
 
 
 def panda_controller_config():
@@ -60,68 +59,42 @@ def adapt_observation(env, raw, camera_name: str) -> Observation:
 
 
 class RobosuiteBackend:
-    capabilities = frozenset({"rgb", "depth", "calibration", "robot_state", "reset", "step"})
+    """Physics and sensors only. Scene creation is injected by the factory."""
 
-    def __init__(self, config, *, window=False):
-        self.config = config
+    def __init__(self, scene_factory, *, camera_name, adapter, window=False):
+        self.scene_factory = scene_factory
+        self.camera_name = camera_name
+        self.adapter = adapter
         self.window = window
         self.env = None
         self.observation = None
-        self.adapter = PandaActionAdapter(config.grasp_quaternion_xyzw)
-        self.action_spec = self.adapter.spec
-        self.evaluator = PlacementEvaluator(config)
 
     def reset(self, seed: int) -> Observation:
-        from vision_arm_lab.backends.scene import CubePlacement
-
-        # Recreate the single environment so every reset(seed) resets all RNGs,
-        # controller goals, gripper state, and evaluator history together.
         self.close()
-        c = self.config
-        self.env = CubePlacement(
-            scene_config=c, robots="Panda", controller_configs=panda_controller_config(),
-            has_renderer=self.window, has_offscreen_renderer=True,
-            use_camera_obs=True, use_object_obs=False,
-            camera_names=c.camera_name, camera_heights=c.camera_size_px[0],
-            camera_widths=c.camera_size_px[1], camera_depths=True,
-            control_freq=c.control_hz, horizon=round(c.episode_timeout_s * c.control_hz),
-            initialization_noise=None, seed=seed, hard_reset=False,
-        )
         try:
+            self.env = self.scene_factory(seed)
             raw = self.env.reset()
-            self.evaluator.reset()
-            self.observation = adapt_observation(self.env, raw, c.camera_name)
+            self.observation = adapt_observation(self.env, raw, self.camera_name)
             return self.observation
-        except Exception:
+        except BaseException:
             self.close()
             raise
 
     def step(self, chunk):
         if self.env is None or self.observation is None:
             raise RuntimeError("Call reset before step")
-        if self.evaluator.result.terminated:
-            raise RuntimeError("Episode ended; call reset before step")
         command = self.adapter.encode(chunk, self.observation.robot.eef_quaternion_xyzw)
         raw, _, _, _ = self.env.step(command)
-        self.observation = adapt_observation(self.env, raw, self.config.camera_name)
-        result = self.evaluator.update(
-            self.read_privileged_state(), self.observation.timestamp_s, chunk.actions[0].gripper,
-        )
-        return self.observation, result
+        self.observation = adapt_observation(self.env, raw, self.camera_name)
+        return self.observation
 
-    def read_privileged_state(self) -> ObjectState:
-        """Explicit expert/evaluation channel; never passed to visual policies."""
+    @property
+    def diagnostics(self):
         if self.env is None:
-            raise RuntimeError("Call reset before reading privileged state")
-        env = self.env
-        body_id = env.cube_body_id
-        return ObjectState(
-            position_m=env.sim.data.body_xpos[body_id].copy(),
-            rotation=env.sim.data.body_xmat[body_id].reshape(3, 3).copy(),
-            linear_velocity_m_s=env.sim.data.get_body_xvelp(env.cube.root_body),
-            angular_velocity_rad_s=env.sim.data.get_body_xvelr(env.cube.root_body),
-            gripper_contact=env.check_contact(env.robots[0].gripper["right"], env.cube),
-        )
+            return {'backend': 'robosuite', 'gl_renderer': None}
+        from OpenGL import GL
+        renderer = GL.glGetString(GL.GL_RENDERER)
+        return {'backend': 'robosuite', 'gl_renderer': renderer.decode() if renderer else None}
 
     def render(self):
         if self.env is None or not self.window:
@@ -129,7 +102,7 @@ class RobosuiteBackend:
         self.env.render()
 
     def close(self):
-        if self.env is not None:
-            self.env.close()
-            self.env = None
+        env, self.env = self.env, None
         self.observation = None
+        if env is not None:
+            env.close()

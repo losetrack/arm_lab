@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vision-arm-lab"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.10"
 dependencies = [
   "numpy==1.26.4",
@@ -15,7 +15,14 @@ dependencies = [
   "PyYAML==6.0.3",
   "opencv-python==4.11.0.86",
   "imageio-ffmpeg==0.6.0",
+  "packaging==26.3",
 ]
+
+[project.scripts]
+vision-arm = "vision_arm_lab.cli:main"
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

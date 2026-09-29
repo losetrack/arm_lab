@@ -3,7 +3,7 @@ from itertools import product
 
 import numpy as np
 
-from vision_arm_lab.config import SceneConfig
+from vision_arm_lab.core.contracts import TaskResult
 
 
 @dataclass(frozen=True)
@@ -17,19 +17,8 @@ class ObjectState:
     gripper_contact: bool
 
 
-@dataclass(frozen=True)
-class TaskResult:
-    status: str
-    elapsed_s: float
-    stable_s: float
-
-    @property
-    def terminated(self) -> bool:
-        return self.status != "running"
-
-
 class PlacementEvaluator:
-    def __init__(self, config: SceneConfig):
+    def __init__(self, config):
         self.config = config
         self.local_corners = np.array(list(product((-0.5, 0.5), repeat=3))) * config.cube_side_m
         self.reset()

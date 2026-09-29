@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from vision_arm_lab.contracts import Action, ActionChunk, ActionSpec
-from vision_arm_lab.control import PandaActionAdapter
+from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec
+from vision_arm_lab.simulation.control import PandaActionAdapter
 
 
 def chunk(delta=(0, 0, 0), rotation=(0, 0, 0), gripper=-1):

@@ -7,33 +7,34 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from vision_arm_lab.config import load_config
-from vision_arm_lab.contracts import Action, ActionChunk
+from vision_arm_lab.core.config import load_config
+from vision_arm_lab.core.contracts import Action, ActionChunk
 
 pytestmark = pytest.mark.integration
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
 def backend():
-    from vision_arm_lab.backends.robosuite import RobosuiteBackend
-    value = RobosuiteBackend(load_config(ROOT / "configs/mvp.yaml"))
+    from vision_arm_lab import make_environment
+    value = make_environment(ROOT / "configs/mvp.yaml")
     yield value
     value.close()
 
 
 def hold(backend):
-    return ActionChunk((Action(np.zeros(3), np.zeros(3), -1),), backend.action_spec)
+    return ActionChunk((Action(np.zeros(3), np.zeros(3), -1),), backend.spec.action_spec)
 
 
 def test_scene_seeds_sensors_and_no_experiment_files(backend, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     first = None
     poses = set()
-    for seed in backend.config.development_seeds + [0]:
+    seeds = load_config(ROOT / 'configs/mvp.yaml').development_seeds
+    for seed in seeds + [0]:
         observation = backend.reset(seed)
-        env = backend.env
-        truth = backend.read_privileged_state()
+        env = backend._backend.env  # White-box scene integration assertions only.
+        truth = backend._read_task_state()
         assert -0.10 <= truth.position_m[0] <= 0.10
         assert -0.15 <= truth.position_m[1] <= -0.05
         np.testing.assert_allclose(truth.position_m[2], 0.83, atol=1e-12)
@@ -60,22 +61,22 @@ def test_scene_seeds_sensors_and_no_experiment_files(backend, tmp_path, monkeypa
         red, green, blue = camera.rgb.astype(float).transpose(2, 0, 1)
         assert np.any((red > 1.5 * green) & (red > 1.5 * blue) & (red > 80))
         assert np.any((green > 1.5 * red) & (green > 1.5 * blue) & (green > 80))
-        after, result = backend.step(hold(backend))
-        assert after.timestamp_s == pytest.approx(0.05)
-        assert result.status == "running"
-    assert len(poses) == len(backend.config.development_seeds)
+        step = backend.step(hold(backend))
+        assert step.observation.timestamp_s == pytest.approx(0.05)
+        assert step.task_result.status == "running"
+    assert len(poses) == len(seeds)
     assert list(tmp_path.iterdir()) == []
 
 
 def test_physical_placement_success_reset_and_timeout(backend):
     backend.reset(0)
-    env = backend.env
+    env = backend._backend.env
     # Test-only privileged placement, not an expert policy or a grasp success.
     env.sim.data.set_joint_qpos(env.cube.joints[0], [0.1, 0.15, 0.82, 1, 0, 0, 0])
     env.sim.data.set_joint_qvel(env.cube.joints[0], np.zeros(6))
     env.sim.forward()
     for _ in range(60):
-        _, result = backend.step(hold(backend))
+        result = backend.step(hold(backend)).task_result
         if result.terminated:
             break
     assert result.status == "success"
@@ -83,13 +84,12 @@ def test_physical_placement_success_reset_and_timeout(backend):
     with pytest.raises(RuntimeError, match="Episode ended"):
         backend.step(hold(backend))
     backend.reset(0)
-    assert backend.evaluator.result.status == "running"
+    assert backend._evaluator.result.status == "running"
     # Shorten only this test's horizon to check termination wiring. Unit tests
     # separately cover the production 60-second threshold exactly.
-    backend.config = replace(backend.config, episode_timeout_s=0.1)
-    backend.evaluator.config = backend.config
+    backend._evaluator.config = replace(backend._evaluator.config, episode_timeout_s=0.1)
     backend.step(hold(backend))
-    _, result = backend.step(hold(backend))
+    result = backend.step(hold(backend)).task_result
     assert result.status == "timeout"
     backend.close()
     with pytest.raises(RuntimeError, match="reset"):

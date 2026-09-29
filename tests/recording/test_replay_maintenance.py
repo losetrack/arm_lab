@@ -2,10 +2,10 @@ from dataclasses import asdict
 import json
 import sys
 import pytest
-from vision_arm_lab.contracts import ActionSpec
-from vision_arm_lab.provenance import fingerprint
-from vision_arm_lab.replay import load_episode
-from vision_arm_lab.maintenance import main as cleanup
+from vision_arm_lab.core.contracts import ActionSpec
+from vision_arm_lab.recording.provenance import fingerprint
+from vision_arm_lab.recording.replay import load_episode
+from vision_arm_lab.cli.maintenance import main as cleanup
 
 
 @pytest.fixture

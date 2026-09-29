@@ -1,0 +1,173 @@
+# 环境与算法开发接口
+
+适用于 0.2.0。安装和启动见 [README](README.md)，外部算法示例见 [examples](examples/custom_policy.py)。当前支持同步单环境、Panda 单方块任务和 T03；公共 API 从 `vision_arm_lab` 导入。
+
+## 创建与驱动环境
+
+```python
+import numpy as np
+from vision_arm_lab import make_environment, Action, ActionChunk
+
+with make_environment("configs/mvp.yaml", render_mode="offscreen") as env:
+    obs = env.reset(seed=0)
+    for _ in range(20):
+        camera = obs.cameras[env.spec.task.camera_name]
+        rgb, depth = camera.rgb, camera.depth_m
+        eef_position = obs.robot.eef_position_m
+        # 保持末端位置和固定姿态，并打开夹爪。
+        command = ActionChunk(
+            (Action(np.zeros(3), np.zeros(3), -1),), env.spec.action_spec,
+        )
+        step = env.step(command)
+        obs = step.observation
+        if step.done:
+            break
+```
+
+`config` 接受 YAML 路径或 `SceneConfig`。相对路径以调用进程当前工作目录为基准；从其他目录运行时传绝对路径。工厂组装组件，但直到 `reset` 才创建物理环境和渲染上下文。
+
+| 能力 | 语义 |
+| --- | --- |
+| `env.spec` | 动作规格、相机名/分辨率、机器人关节顺序、传感器能力、任务先验和时限 |
+| `reset(seed=0)` | 返回初始 Observation；重建物理环境并重置任务、控制器和随机源 |
+| `step(ActionChunk)` | 执行一个控制周期，返回 StepResult；其 `done` 来自任务终止状态 |
+| `env.observation` | 最近一次 reset/step 的观测；关闭后为 None |
+| `render()` | 仅 window 模式使用，更新窗口但不推进物理；窗口循环由调用者决定是否等待 |
+| `env.diagnostics` | 后端和实际 GL 渲染器信息；reset 前渲染器为 None |
+| `close()` / `with` | 关闭资源；重复关闭允许；close 后需 reset 才能再次 step |
+
+首次 step 前必须 reset，任务终止后也必须 reset。非法动作在推进物理前拒绝，调用者可以修正；物理/任务执行出现意外异常时关闭环境，再次使用需 reset。建议始终用 `with` 管理用户代码异常。
+
+`render_mode` 选择是否显示窗口；图形驱动由进程启动前的 `MUJOCO_GL` 配置决定。离屏示例使用 `MUJOCO_GL=egl`，窗口示例使用 `MUJOCO_GL=glfw`。更换图形驱动应启动新进程，不能在已导入仿真库后切换。
+
+## 观测和动作
+
+Observation 是一次采样快照，读取多个字段不会推进仿真。数组与仿真内部缓冲区隔离，默认只读；修改图像做预处理时先 `.copy()`。相机映射也不可直接修改。
+
+| 字段 | 形状 / 语义 |
+| --- | --- |
+| `obs.cameras[name].rgb` | `(H, W, 3)`、uint8、RGB；左上像素中心 `(0, 0)` |
+| `.depth_m` | `(H, W)`，米制光轴深度；不是到相机的欧氏距离 |
+| `.intrinsics` | `(3, 3)` 相机内参 K |
+| `.camera_to_world` | `(4, 4)`，将 OpenCV 相机坐标变换至世界坐标 |
+| `.timestamp_s` | 相机采样的仿真时间 |
+| `obs.robot.joint_names` | 关节顺序；Panda 为 `robot0_joint1` 至 `robot0_joint7` |
+| `.joint_position_rad` / `.joint_velocity_rad_s` | `(7,)`，弧度 / 弧度每秒 |
+| `.eef_position_m` / `.eef_quaternion_xyzw` | `(3,)` 世界坐标位置 / `(4,)` xyzw 四元数，同一末端控制 site |
+| `.gripper_position_m` | `(2,)` 两指关节位置，米 |
+| `obs.timestamp_s` | 本次环境观测的仿真时间 |
+
+RGB/深度的契约允许 None 表示缺失；当前后端提供两者。算法声明的输入若不受支持或首次观测缺失，评测会明确报告。当前每个控制步更新一份 20 Hz 的 RGB-D/机器人观测，物理仿真为 500 Hz。
+
+公开任务先验在 `env.spec.task`：`camera_name`、`table_height_m`、`cube_side_m`、`target_center_m`、`target_size_m`。其中没有随机采样的方块位姿、接触状态或其他真值。
+
+T03 动作保持不变：
+
+- `delta_position_m`：世界坐标 XYZ 增量，每轴绝对值≤0.005 m；增量相对已达到的末端位置，不是速度。
+- `delta_rotation_rad`：三维全零。固定俯视姿态由适配器维持。
+- `gripper`：-1 打开，+1 闭合。
+- 每个 ActionChunk 恰有一个 Action，规格必须与 `env.spec.action_spec` 相同；控制周期 0.05 秒。
+- 越界、非有限值、错误形状和不支持的规格明确报错，不自动裁剪。
+
+## 接入完整策略
+
+实现三个成员：`action_spec`、`required_inputs`、`reset()/act(observation)`。最小示例见 [custom_policy.py](examples/custom_policy.py)；无需继承项目基类，也不需要 `phase` 或 `events`。
+
+```python
+from vision_arm_lab import evaluate
+from my_algorithm import make_policy
+
+report = evaluate(
+    "configs/mvp.yaml",
+    policy_factory=make_policy,  # make_policy(EnvironmentSpec) -> Policy
+    seeds=[0, 1, 2], steps=100, record="off",
+)
+print(report.summary)
+```
+
+工厂在一次 evaluate 中构造一个策略，每个回合调用一次 `reset()`。算法应在 reset 中清空回合状态；自己的模型、参数和随机数管理由算法负责。工厂只接收公开规格，不接收后端。
+
+`required_inputs` 是传感器名称的 frozenset，可使用 `rgb`、`depth`、`calibration`、`robot_state`。构造时读取 TaskInfo 所需先验；不要在这个集合里混入内部定位模块或不受支持的真值字段。
+
+预期算法失败可以 `raise PolicyFailure("localization_failed")`，消息用作结果标签。意外算法异常记录为 `policy_error`；后端异常为 `environment_error`；中断为 `interrupted`。不会替换失败种子或自动重试。
+
+可选实现 `diagnostics() -> Mapping` 返回 JSON 可序列化诊断。通用运行器不依赖诊断内容；内置抓放策略在这里报告状态机阶段。命令行 `--verbose` 在诊断变化时输出。
+
+## 只替换视觉定位器
+
+`locator_factory(TaskInfo)` 返回一个可调用定位器，接受 Observation，返回世界坐标下的三维方块中心；声明其需要的 `required_inputs`。调用：
+
+```python
+report = evaluate(
+    "configs/mvp.yaml", locator_factory=make_locator, seeds=[0, 1],
+)
+```
+
+该入口复用当前 GraspPolicy，仍在初始等待后定位一次。完整策略接入点可自行决定何时使用视觉数据。内置专家由单独组装路径注入真值读取器，其结果明确标注真值来源；普通自定义工厂不获得这个接口。
+
+`policy="expert"/"vision"/"inspect"`、`policy_factory`、`locator_factory` 三选一；都未传时默认 vision。不要给自定义算法同时传入内置策略名。
+
+## 命令行接入同一个算法
+
+从仓库根目录运行：
+
+```bash
+PYTHONPATH=examples MUJOCO_GL=egl vision-arm evaluate \
+  --config configs/mvp.yaml --policy-factory custom_policy:make_policy --seed 0 --steps 20
+
+PYTHONPATH=examples MUJOCO_GL=egl vision-arm evaluate \
+  --config configs/mvp.yaml --locator-factory custom_policy:make_locator --seed 0
+```
+
+自定义模块需要安装到当前 Python 环境，或将其所在目录加入 PYTHONPATH。这里只导入用户显式指定的 `MODULE:CALLABLE`，没有插件扫描或动态注册服务。示例 HoldPosition 只保持位置，短回合结果应为 step_limit，不代表抓放成功。
+
+## 评测结果与记录
+
+`evaluate` 返回 EvaluationReport：
+
+- `episodes`：逐回合字典，包含种子、状态、实际执行步数、仿真/墙钟时间、信息来源、算法诊断和环境诊断；意外异常含阶段、类型和消息。
+- `summary`：已尝试回合数、成功数/率、成功平均仿真时间、结果分类、记录模式、警告与预算。
+- `records`：开启记录时的输出目录；off 为 None。
+
+任务成功规则沿用 MVP。达到运行器 `steps` 上限时，普通算法返回 step_limit；inspect 返回 running。任务超时与步数上限不是成功。Python API 返回失败结果供调用者处理，不退出进程；CLI 遇算法/环境错误返回 1，配置/启动错误返回 2，中断返回 130，已完成的任务成败统计通常返回 0。
+
+默认 off 不创建实验文件。需要完整记录选项时传 `RecordOptions`：
+
+```python
+from vision_arm_lab import RecordOptions
+
+options = RecordOptions(mode="debug", output="runs", actions=True,
+                        observations=True, observation_hz=20)
+report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options)
+```
+
+新增的 `run_episode(env, policy, seed, steps, on_transition=...)` 可用于自行组合环境与消费者。Transition 含步号、执行前观测、动作、执行后观测和任务结果，第一步的执行前观测就是 reset 返回值。该函数不拥有传入环境的生命周期，调用者负责 `with`/close；外部回调异常原样传播。
+
+现有 v1 磁盘记录仍保存动作与执行后观测，初始观测不单独保存；本轮没有变更它的训练含义。自定义算法的参数、代码版本等可通过 `evaluate(..., policy_metadata={...})` 显式记录；自动源码指纹覆盖项目包，不自动扫描算法的外部依赖代码。
+
+## 内部边界与迁移
+
+| 模块 | 职责 |
+| --- | --- |
+| `core/` | `contracts.py` 定义公共数据、单位和时序；`config.py` 加载配置；`environment.py` 管理通用生命周期，不依赖具体仿真器 |
+| `simulation/` | `robosuite.py`、`scene.py`、`control.py` 负责物理、场景、传感器与控制；`placement_state.py` 读取任务私有真值；`factory.py` 组装具体环境与内置策略 |
+| `algorithms/` | `perception.py` 实现颜色定位；`policies.py` 实现保持与抓放策略，通过公共观测和动作契约工作 |
+| `tasks/` | `placement.py` 实现纯任务判定，不直接访问仿真器 |
+| `evaluation.py` | 通用回合循环、策略注入、批量结果与记录协调 |
+| `recording/` | `recorder.py` 消费 Transition、管理文件预算；`provenance.py` 生成版本指纹；`replay.py` 校验并重放完整动作记录 |
+| `cli/` | 参数解析、用户指定模块导入、安装诊断、终端输出与退出码；复用公共 API |
+| 根目录命令模块 | `__main__.py`、`runner.py`、`replay.py`、`maintenance.py` 保留既有命令入口，转交 `cli/` 执行 |
+
+配置入口仍是现有 YAML。内部按 SimulationConfig、PlacementConfig 和公开 TaskInfo 分配配置，避免算法持有完整后端配置。公开导出是稳定调用入口，内部模块构造函数不承诺兼容。
+
+测试按相同功能归档在 `tests/` 的对应子目录。通用环境只通过协议组合后端和任务判定；算法不导入具体仿真模块；具体组装集中在 `simulation/factory.py`。CLI 和评测层协调这些能力，不把终端参数解析放入算法或环境。
+
+目录整理后，内部导入路径随功能迁移，例如 `vision_arm_lab.perception` 改为 `vision_arm_lab.algorithms.perception`、`vision_arm_lab.config` 改为 `vision_arm_lab.core.config`。仓库内示例已同步；外部代码若直接导入旧内部模块，需更新路径。顶层公共导出和现有命令参数保持不变。
+
+从 MVP 迁移需要注意：
+
+- 原 `python -m vision_arm_lab.runner` 命令保留，内部转到公共 evaluate；其默认策略仍为 inspect。新 `vision-arm evaluate` 默认 vision。
+- 原直接构造 RobosuiteBackend 的调用改用 `make_environment`；`step` 返回 StepResult，使用 `.observation/.task_result/.done`。
+- `final_phase/phases` 移入结果的 `policy_diagnostics`；GL 信息在 `environment.gl_renderer`；新算法错误单独标记 policy_error。
+- 观测数组变为只读，修改前先复制。
+- 回放复用公共环境工厂。源码指纹现在以包内相对路径计算，正式安装包也可记录；旧版本记录按原有严格匹配规则被拒绝，若需重放应在匹配的旧代码/依赖环境执行。

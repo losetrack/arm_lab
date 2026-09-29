@@ -4,7 +4,7 @@ import numpy as np
 
 
 def test_sensor_allowlist_pixel_convention_and_owned_arrays(monkeypatch):
-    from vision_arm_lab.backends import robosuite as backend
+    from vision_arm_lab.simulation import robosuite as backend
 
     # An extra privileged key must never be requested or propagated.
     class Raw(dict):

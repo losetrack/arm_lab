@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from vision_arm_lab.config import load_config
-from vision_arm_lab.policies import GraspPolicy, PolicyFailure
+from vision_arm_lab.core.config import load_config
+from vision_arm_lab.algorithms.policies import GraspPolicy, PolicyFailure
 
 
 def observation(time, position=(0, 0, 1), gap=0.08):

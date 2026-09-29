@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 import pytest
-from vision_arm_lab.contracts import Action, ActionChunk, ActionSpec
-from vision_arm_lab.data import Recorder, RecordOptions
+from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec
+from vision_arm_lab.recording.recorder import Recorder, RecordOptions
 
 
 def command():

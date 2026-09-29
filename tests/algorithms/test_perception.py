@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from vision_arm_lab.perception import ColorLocator
-from vision_arm_lab.policies import PolicyFailure
+from vision_arm_lab.algorithms.perception import ColorLocator
+from vision_arm_lab.algorithms.policies import PolicyFailure
 
 
 def scene():

@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 import cv2
 import numpy as np
-from vision_arm_lab.policies import PolicyFailure
+from vision_arm_lab.core.contracts import PolicyFailure
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,8 @@ class VisionConfig:
 
 
 class ColorLocator:
-    required_inputs = frozenset({'rgb', 'depth', 'calibration', 'table_height', 'cube_size', 'color_range'})
+    required_inputs = frozenset({'rgb', 'depth', 'calibration'})
+    required_priors = frozenset({'table_height', 'cube_size', 'color_range'})
 
     def __init__(self, scene, config=VisionConfig()):
         self.scene = scene

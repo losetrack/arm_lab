@@ -1,11 +1,7 @@
 """Shared grasp state machine; localization is the expert/vision difference."""
 from dataclasses import dataclass
 import numpy as np
-from vision_arm_lab.contracts import Action, ActionChunk, ActionSpec
-
-
-class PolicyFailure(RuntimeError):
-    pass
+from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec, PolicyFailure
 
 
 @dataclass(frozen=True)
@@ -27,14 +23,18 @@ class GraspConfig:
 
 class GraspPolicy:
     action_spec = ActionSpec()
-    required_inputs = frozenset({"robot_state", "localization"})
+    required_inputs = frozenset({"robot_state"})
     phases = ("settle", "approach", "descend", "close", "lift", "transfer", "lower", "release", "retreat", "wait")
 
     def __init__(self, scene, locate, config=GraspConfig()):
         self.scene = scene
         self.locate = locate
         self.config = config
+        self.required_inputs = self.required_inputs | getattr(locate, 'required_inputs', frozenset())
         self.reset()
+
+    def diagnostics(self):
+        return {'final_phase': self.phase, 'phases': [dict(event) for event in self.events]}
 
     def reset(self):
         self.phase = "settle"
@@ -95,3 +95,17 @@ class GraspPolicy:
             elif elapsed > timeout:
                 raise PolicyFailure("stage_timeout")
         return ActionChunk((Action(delta, np.zeros(3), gripper),), self.action_spec)
+
+
+class HoldPolicy:
+    """Keep the achieved position and fixed orientation, with an open gripper."""
+    required_inputs = frozenset({'robot_state'})
+
+    def __init__(self, spec):
+        self.action_spec = spec.action_spec
+
+    def reset(self):
+        pass
+
+    def act(self, observation):
+        return ActionChunk((Action(np.zeros(3), np.zeros(3), -1),), self.action_spec)
