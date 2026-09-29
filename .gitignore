@@ -22,3 +22,11 @@ dist/
 # Experiment records, videos, and simulator logs
 runs/
 MUJOCO_LOG.TXT
+
+# Local project documentation
+/docs/
+
+# Local coding-agent instructions and configuration
+AGENTS.md
+/.agents/
+/.codex/
