@@ -31,7 +31,7 @@ def test_scene_seeds_sensors_and_no_experiment_files(backend, tmp_path, monkeypa
     first = None
     poses = set()
     seeds = load_config(ROOT / 'configs/mvp.yaml').development_seeds
-    for seed in seeds + [0]:
+    for seed in (*seeds, 0):
         observation = backend.reset(seed)
         env = backend._backend.env  # White-box scene integration assertions only.
         truth = backend._read_task_state()

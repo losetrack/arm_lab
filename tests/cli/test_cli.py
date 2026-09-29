@@ -32,7 +32,7 @@ def test_cli_uses_api_report_and_exit_status(monkeypatch, capsys):
         result = {'status': 'policy_error'}
         kwargs['on_episode'](result)
         return SimpleNamespace(episodes=(result,), summary={'episodes': 1}, records=None)
-    monkeypatch.setattr('vision_arm_lab.evaluation.evaluate', evaluate)
+    monkeypatch.setattr('vision_arm_lab.application.evaluate', evaluate)
     with pytest.raises(SystemExit) as exit:
         main(['evaluate', '--config', 'scene.yaml', '--seed', '3', '--policy', 'expert'])
     assert exit.value.code == 1

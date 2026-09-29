@@ -9,7 +9,7 @@ _MODULES = {
         'TaskInfo', 'TaskResult', 'Transition',
     ), 'core.contracts'),
     'Environment': 'core.environment', 'make_environment': 'simulation.factory',
-    'EvaluationReport': 'evaluation', 'evaluate': 'evaluation',
+    'EvaluationReport': 'evaluation', 'evaluate': 'application',
     'run_episode': 'evaluation', 'RecordOptions': 'recording.recorder',
 }
 __all__ = list(_MODULES)

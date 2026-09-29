@@ -1,4 +1,5 @@
 from dataclasses import asdict, replace
+import json
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -33,6 +34,21 @@ def test_snapshot_survives_source_removal_and_metadata_roundtrip(custom_scene):
         load_config(config_file)
     with pytest.raises(ValueError, match='must match scene XML'):
         replace(config, cube_side_m=0.06)
+
+
+def test_configuration_vectors_are_owned_immutable_snapshots(custom_scene):
+    config = load_config(custom_scene[0])
+    values = json.loads(json.dumps(asdict(config)))
+    restored = SceneConfig(**values)
+    simulation, spec, placement = restored.simulation, restored.spec, restored.placement
+    for name, value in values.items():
+        if isinstance(value, list):
+            value[0] += 1
+            assert getattr(restored, name) == getattr(config, name)
+            with pytest.raises(TypeError):
+                getattr(restored, name)[0] = value[0]
+    assert simulation.target_center_m == spec.task.target_center_m == placement.target_center_m
+    assert SceneConfig(**restored.record_metadata()['scene']) == config
 
 
 def test_duplicate_physical_yaml_parameter_is_rejected(custom_scene):

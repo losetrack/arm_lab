@@ -42,6 +42,8 @@ MUJOCO_GL=egl vision-arm inspect --config configs/my_scene.yaml --seed 0 --steps
 
 Python API 的配置路径同样改为 `configs/my_scene.yaml`。读取配置时会保存 XML 快照；修改源文件后需重新创建环境，已有环境的 `reset()` 继续使用原快照。
 
+快照配置的向量和种子均为不可变元组，不能原地改写；修改运行参数须创建并校验新配置。XML、内部配置视图和算法公开先验保持一致，元数据序列化时仍使用 JSON 数组。
+
 配置读取与 XML 解析分别位于 `simulation/config.py`、`simulation/scene_xml.py`，资源解析和场景恢复也由仿真层负责。核心层只管理环境生命周期和公共数据，算法只接收公开观测及 TaskInfo 先验。
 
 ## 场景创建流程
@@ -52,6 +54,8 @@ Python API 的配置路径同样改为 `configs/my_scene.yaml`。读取配置时
 4. 算法只使用公开的规格、观测和动作接口。桌面高度、方块尺寸及目标区等通过 `TaskInfo` 提供，无须读取 YAML、XML 或接触场景对象。
 
 记录时由仿真配置提供场景快照与资源指纹；回放调用 `simulation.factory.make_recorded_environment()`，由仿真层校验资源并恢复场景，记录层不解释 XML 或组装场景。
+
+批量评测由 `application.evaluate()` 连接环境、算法与记录器，再交给 `evaluation.py` 执行；仿真工厂不负责算法选择。
 
 ## 参数归属
 

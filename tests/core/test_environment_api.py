@@ -181,7 +181,7 @@ def test_capability_and_action_spec_rejected_before_reset():
 
 def test_evaluate_injection_reset_no_files_and_cleanup(tmp_path, monkeypatch):
     environment, backend = fixture_environment()
-    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    monkeypatch.setattr('vision_arm_lab.application.make_environment', lambda *a, **kw: environment)
     monkeypatch.chdir(tmp_path)
     received = []
     def factory(spec):
@@ -197,7 +197,7 @@ def test_evaluate_injection_reset_no_files_and_cleanup(tmp_path, monkeypatch):
 
 def test_callback_failure_is_visible_and_closes_environment(monkeypatch):
     environment, backend = fixture_environment()
-    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    monkeypatch.setattr('vision_arm_lab.application.make_environment', lambda *a, **kw: environment)
     def fail(result):
         raise RuntimeError('consumer failed')
     with pytest.raises(RuntimeError, match='consumer failed'):
@@ -216,7 +216,7 @@ def test_config_validation_precedes_simulation(changes):
 @pytest.mark.parametrize('reason', ['success', 'timeout', 'environment_error', 'localization_failed'])
 def test_policy_failure_cannot_set_task_or_execution_status(reason, monkeypatch):
     environment, _ = fixture_environment()
-    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    monkeypatch.setattr('vision_arm_lab.application.make_environment', lambda *a, **kw: environment)
     class FailedPolicy(HoldPolicy):
         def act(self, observation):
             raise PolicyFailure(reason)
@@ -235,7 +235,7 @@ def test_policy_failure_cannot_set_task_or_execution_status(reason, monkeypatch)
 @pytest.mark.parametrize('use_list', [False, True])
 def test_numpy_actions_have_identical_behavior_with_recording(mode, use_list, tmp_path, monkeypatch):
     environment, _ = fixture_environment()
-    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    monkeypatch.setattr('vision_arm_lab.application.make_environment', lambda *a, **kw: environment)
     class NumpyPolicy(HoldPolicy):
         def act(self, observation):
             delta = [0, 0, 0] if use_list else np.zeros(3, dtype=np.float32)
@@ -276,8 +276,23 @@ def test_action_normalization_owns_the_recorded_values():
 
 def test_real_task_success_is_counted(monkeypatch):
     environment, _ = fixture_environment()
-    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    monkeypatch.setattr('vision_arm_lab.application.make_environment', lambda *a, **kw: environment)
     report = evaluate(CONFIG, seeds=[0], policy_factory=HoldPolicy, steps=22)
     assert report.summary['success_rate'] == 1
     assert report.episodes[0]['task_status'] == 'success'
     assert 'failure_reason' not in report.episodes[0]
+
+
+@pytest.mark.parametrize('mode', ['off', 'summary', 'debug'])
+def test_robot_only_evaluation_is_independent_of_recording(mode, tmp_path, monkeypatch):
+    environment, backend = fixture_environment()
+    environment.spec = replace(environment.spec, camera_names=(), capabilities=frozenset({'robot_state'}))
+    original = backend.observation
+    backend.observation = lambda: replace(original(), cameras={})
+    monkeypatch.setattr('vision_arm_lab.application.make_environment', lambda *a, **kw: environment)
+    report = evaluate(CONFIG, seeds=[0], policy_factory=HoldPolicy, steps=2,
+                      record=RecordOptions(mode=mode, actions=mode == 'debug', output=str(tmp_path)))
+    assert report.episodes[0]['status'] == 'step_limit'
+    assert report.episodes[0]['steps'] == 2
+    assert report.summary['outcomes'] == {'step_limit': 1}
+    assert report.episodes[0]['recording']['actions_complete'] == (mode == 'debug')

@@ -198,12 +198,12 @@ class Recorder:
             }).encode() + b'\n'
             if self._write(self.episode_path / 'actions.jsonl', payload, append=True, extra=True):
                 self.actions_written += 1
-        camera = next(iter(observation.cameras.values()))
         if options.observations and self.index < options.observation_episodes and observation.timestamp_s + 1e-9 >= self.next_observation:
             self.next_observation += 1 / options.observation_hz
             if self.extra_stopped:
                 self.observations_incomplete = True
             else:
+                camera = next(iter(observation.cameras.values()))
                 payload = BytesIO()
                 np.savez_compressed(payload, rgb=camera.rgb, depth_m=camera.depth_m,
                     intrinsics=camera.intrinsics, camera_to_world=camera.camera_to_world,
@@ -222,6 +222,7 @@ class Recorder:
             if self.extra_stopped:
                 self.video_incomplete = True
                 return
+            camera = next(iter(observation.cameras.values()))
             if self.stream is None:
                 path = self.episode_path / f'.tmp-video-{uuid4().hex}.mp4'
                 try:
@@ -258,26 +259,20 @@ class Recorder:
                 self.video_incomplete |= not complete
             self.stream = None
         recording = {
-            'actions_complete': self.options.actions and self.steps > 0 and self.steps == self.actions_written,
+            'actions_complete': self.options.actions and result['steps'] > 0 and result['steps'] == self.steps == self.actions_written,
             'actions_written': self.actions_written, 'observations_written': self.observations_written,
             'observations_incomplete': self.observations_incomplete,
             'video_incomplete': self.video_incomplete, 'video': video_path,
         }
-        result = {**result, 'steps': self.steps, 'recording': recording}
+        result = {**result, 'recording': recording}
         if self.root is not None:
             self._json(self.episode_path / 'result.json', result)
         return result
 
-    def finish(self, results):
-        successes = [r for r in results if r['status'] == 'success']
-        reasons = {}
-        for result in results:
-            reasons[result['status']] = reasons.get(result['status'], 0) + 1
+    def finish(self, metrics):
+        """Save caller-owned evaluation metrics with recording diagnostics."""
         summary = {
-            'episodes': len(results), 'successes': len(successes),
-            'success_rate': len(successes) / len(results) if results else 0,
-            'mean_success_time_s': float(np.mean([r['sim_time_s'] for r in successes])) if successes else None,
-            'outcomes': reasons, 'recording': self.options.mode,
+            **metrics, 'recording': self.options.mode,
             'warnings': self.warnings, 'budget_bytes': self.options.budget_bytes,
         }
         if self.root is not None:

@@ -26,6 +26,8 @@ with make_environment("configs/mvp.yaml", render_mode="offscreen") as env:
 
 `config` 接受 YAML 路径或 `SceneConfig`。相对路径以调用进程当前工作目录为基准；从其他目录运行时传绝对路径。工厂组装组件，但直到 `reset` 才创建物理环境和渲染上下文。
 
+配置中的数值向量和开发种子在加载时转换为不可变元组；YAML/JSON 中仍使用数组。修改运行参数时可用 `dataclasses.replace` 创建并校验新配置，修改派生的物理参数仍需编辑 XML 后重新加载。配置视图与公开规格不会受原始输入列表的后续修改影响。
+
 | 能力 | 语义 |
 | --- | --- |
 | `env.spec` | 动作规格、相机名/分辨率、机器人关节顺序、传感器能力、任务先验和时限 |
@@ -157,18 +159,23 @@ report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options
 | `simulation/` | `config.py` 加载 YAML 并生成配置和公开规格；`scene_xml.py` 解析 XML、定位资源和生成资源指纹；`factory.py` 组装环境及恢复记录中的场景；`scene.py`、`robosuite.py`、`control.py` 实现场景、物理、传感器与控制；`placement_state.py` 读取私有真值 |
 | `algorithms/` | `perception.py` 实现颜色定位；`policies.py` 实现保持与抓放策略，通过公共观测和动作契约工作 |
 | `tasks/` | `placement.py` 定义 PlacementConfig 并实现纯任务判定，不直接访问仿真器 |
-| `evaluation.py` | 通用回合循环、策略注入、批量结果与记录协调 |
-| `recording/` | `recorder.py` 消费 Transition、管理文件预算；`provenance.py` 生成版本指纹；`replay.py` 校验并重放完整动作记录 |
+| `application.py` | 公共 `evaluate` 入口，读取仿真配置、选择算法、组装环境和记录器；从实际算法实例收集配置元数据 |
+| `evaluation.py` | 单回合及批量执行、失败分类、成功率等指标；消费已组装组件，不导入仿真、算法实现或记录器实现 |
+| `recording/` | `recorder.py` 消费 Transition、管理文件预算、保存调用方提供的结果与指标；`provenance.py` 生成版本指纹；`replay.py` 校验并重放完整动作记录 |
 | `cli/` | 参数解析、用户指定模块导入、安装诊断、终端输出与退出码；复用公共 API |
 | 根目录命令模块 | `__main__.py`、`runner.py`、`replay.py`、`maintenance.py` 保留既有命令入口，转交 `cli/` 执行 |
 
 配置入口仍是 YAML；物理场景参数来自包内 `simulation/assets/placement.xml`，或 YAML 的 `scene_xml` 指定的文件。XML 路径相对 YAML 解析，加载时保存快照并从中提取尺寸、目标区和相机参数；详见 [XML 场景说明](SCENE.md)。内部按 SimulationConfig、PlacementConfig 和公开 TaskInfo 分配配置，避免算法持有完整后端配置。公开导出是稳定调用入口，内部模块构造函数不承诺兼容。
 
-测试按相同功能归档在 `tests/` 的对应子目录。通用环境只通过协议组合后端和任务判定；算法不导入具体仿真模块；具体组装集中在 `simulation/factory.py`。CLI 和评测层协调这些能力，不把终端参数解析放入算法或环境。
+测试按相同功能归档在 `tests/` 的对应子目录。通用环境只通过协议组合后端和任务判定；算法不导入具体仿真模块。场景和后端的组装集中在 `simulation/factory.py`，算法选择及环境、算法、记录器之间的连接集中在 `application.py`。专家定位能力由仿真层的专用适配器提供，普通算法工厂只收到公开规格。
+
+评测层负责执行步数、任务结果和汇总指标；记录器保留这些字段，仅补充记录状态。动作记录不依赖相机；当前图像和视频记录仍使用观测中的第一台相机，未扩展多相机选择接口。
 
 场景记录由 `SceneConfig.record_metadata()` 生成，回放通过 `simulation.factory.make_recorded_environment()` 恢复。评测和记录模块不自行解析 XML、定位资源或解释场景几何；算法只接收公开 TaskInfo，不持有 SceneConfig。
 
 目录整理后，内部导入路径随功能迁移，例如 `vision_arm_lab.perception` 改为 `vision_arm_lab.algorithms.perception`。场景配置与 XML 解析进一步从 `core.config`、`core.scene_xml` 移到 `simulation.config`、`simulation.scene_xml`。外部代码若直接导入旧内部模块，需更新路径。顶层公共导出和现有命令参数保持不变。
+
+本轮 `evaluate` 实现从 `evaluation.py` 移到 `application.py`；外部调用推荐继续使用 `from vision_arm_lab import evaluate`。内部 `Recorder.finish` 改为接收已计算的指标字典，记录格式保持 v1。
 
 从 MVP 迁移需要注意：
 

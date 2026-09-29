@@ -52,17 +52,6 @@ def make_recorded_environment(metadata, *, render_mode='offscreen') -> Environme
     return make_environment(SceneConfig(**snapshot), render_mode=render_mode)
 
 
-def make_builtin_policy(name, environment):
-    from vision_arm_lab.algorithms.policies import GraspPolicy, HoldPolicy
-    from vision_arm_lab.algorithms.perception import ColorLocator
-
-    if name == 'inspect':
-        return HoldPolicy(environment.spec)
-    if name == 'expert':
-        # Only this explicitly privileged assembly path receives the state reader.
-        locate = lambda observation: environment._read_task_state().position_m
-    elif name == 'vision':
-        locate = ColorLocator(environment.spec.task)
-    else:
-        raise ValueError(f'Unknown built-in policy: {name}')
-    return GraspPolicy(environment.spec.task, locate)
+def make_expert_locator(environment):
+    """Explicit privileged adapter; never supplied to normal policy factories."""
+    return lambda observation: environment._read_task_state().position_m

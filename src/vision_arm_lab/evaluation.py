@@ -1,15 +1,12 @@
 """Simulator-independent episode execution and the public evaluation API."""
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic, sleep
 from typing import Callable
 
-from vision_arm_lab.simulation.config import load_config
 from vision_arm_lab.core.contracts import (
     ActionValidationError, PolicyDiagnostics, PolicyFailure, Transition,
 )
-from vision_arm_lab.recording.recorder import Recorder, RecordOptions
-from vision_arm_lab.simulation.factory import make_builtin_policy, make_environment
 
 
 @dataclass(frozen=True)
@@ -17,6 +14,20 @@ class EvaluationReport:
     episodes: tuple[dict, ...]
     summary: dict
     records: Path | None
+
+
+def summarize_results(results):
+    """Compute evaluation metrics independently of recording and file I/O."""
+    successes = [result for result in results if result['status'] == 'success']
+    outcomes = {}
+    for result in results:
+        outcomes[result['status']] = outcomes.get(result['status'], 0) + 1
+    return {
+        'episodes': len(results), 'successes': len(successes),
+        'success_rate': len(successes) / len(results) if results else 0,
+        'mean_success_time_s': sum(result['sim_time_s'] for result in successes) / len(successes) if successes else None,
+        'outcomes': outcomes,
+    }
 
 
 def validate_policy(policy, spec):
@@ -117,73 +128,28 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
     return result
 
 
-def evaluate(config, *, seeds, policy=None, policy_factory=None, locator_factory=None,
-             render_mode='offscreen', steps=None, record='off',
-             on_episode=None, on_diagnostic=None, policy_metadata=None) -> EvaluationReport:
-    """Evaluate sequential episodes with one environment and explicit recording.
-
-    Custom factories receive only EnvironmentSpec (or TaskInfo for locators).
-    A fresh custom policy is created once per evaluation and reset per episode.
-    """
-    config = load_config(config)
-    seeds = tuple(seeds)
-    if not seeds or any(type(seed) is not int or seed < 0 for seed in seeds):
-        raise ValueError('seeds must be a nonempty sequence of nonnegative integers')
-    if steps is not None and (type(steps) is not int or steps <= 0):
-        raise ValueError('steps must be a positive integer')
-    if sum(value is not None for value in (policy, policy_factory, locator_factory)) > 1:
-        raise ValueError('Select only one of policy, policy_factory and locator_factory')
-    if policy is not None and policy not in ('inspect', 'expert', 'vision'):
-        raise ValueError(f'Unknown built-in policy: {policy}')
-    options = RecordOptions(mode=record) if isinstance(record, str) else record
-    if not isinstance(options, RecordOptions):
-        raise TypeError('record must be a mode string or RecordOptions')
-    mode = 'custom' if policy_factory is not None else 'custom_locator' if locator_factory is not None else policy or 'vision'
+def run_evaluation(environment, policy, *, seeds, steps, mode, recorder,
+                   on_episode=None, on_diagnostic=None) -> EvaluationReport:
+    """Run assembled components; the caller owns the environment context."""
+    validate_policy(policy, environment.spec)
     results = []
-    # Factory creates no physics context until reset. Context ownership covers all
-    # later policy, recorder, callback and interruption failure paths.
-    with make_environment(config, render_mode=render_mode) as environment:
-        if policy_factory is not None:
-            algorithm = policy_factory(environment.spec)
-        elif locator_factory is not None:
-            from vision_arm_lab.algorithms.policies import GraspPolicy
-            algorithm = GraspPolicy(environment.spec.task, locator_factory(environment.spec.task))
-        else:
-            algorithm = make_builtin_policy(mode, environment)
-        validate_policy(algorithm, environment.spec)
-        metadata = {}
-        if options.mode != 'off':
-            from vision_arm_lab.recording.provenance import fingerprint
-            from vision_arm_lab.algorithms.policies import GraspConfig
-            from vision_arm_lab.algorithms.perception import VisionConfig
-            metadata = {
-                **fingerprint(), **config.record_metadata(),
-                'action_spec': asdict(environment.spec.action_spec),
-                'seeds': seeds, 'policy': mode, 'record_options': asdict(options),
-                'policy_metadata': policy_metadata or {},
-            }
-            if mode in ('expert', 'vision', 'custom_locator'):
-                metadata['grasp'] = asdict(GraspConfig())
-            if mode == 'vision':
-                metadata['vision'] = asdict(VisionConfig())
-        recorder = Recorder(options, metadata)
-        try:
-            for index, seed in enumerate(seeds):
-                recorder.begin_episode(index, seed, mode)
-                result = run_episode(
-                    environment, algorithm, seed,
-                    steps if steps is not None else round(environment.spec.episode_timeout_s / environment.spec.action_spec.interval_s),
-                    mode=mode, on_transition=recorder.record_transition,
-                    on_diagnostic=on_diagnostic,
-                )
-                result['environment'] = environment.diagnostics
-                result = recorder.end_episode(result)
-                results.append(result)
-                if on_episode is not None:
-                    on_episode(result)
-                if result['status'] == 'interrupted':
-                    break
-        finally:
-            recorder.close()
-        summary = recorder.finish(results)
-        return EvaluationReport(tuple(results), summary, recorder.root)
+    try:
+        for index, seed in enumerate(seeds):
+            recorder.begin_episode(index, seed, mode)
+            result = run_episode(
+                environment, policy, seed,
+                steps if steps is not None else round(environment.spec.episode_timeout_s / environment.spec.action_spec.interval_s),
+                mode=mode, on_transition=recorder.record_transition,
+                on_diagnostic=on_diagnostic,
+            )
+            result['environment'] = environment.diagnostics
+            result = recorder.end_episode(result)
+            results.append(result)
+            if on_episode is not None:
+                on_episode(result)
+            if result['status'] == 'interrupted':
+                break
+    finally:
+        recorder.close()
+    summary = recorder.finish(summarize_results(results))
+    return EvaluationReport(tuple(results), summary, recorder.root)

@@ -42,7 +42,7 @@ def import_factory(reference):
 
 def execute(args, *, default_policy='inspect'):
     from vision_arm_lab.recording.recorder import RecordOptions
-    from vision_arm_lab.evaluation import evaluate
+    from vision_arm_lab.application import evaluate
     if args.seed_file:
         import yaml
         with open(args.seed_file) as stream:

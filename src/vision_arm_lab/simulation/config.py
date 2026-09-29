@@ -14,28 +14,34 @@ from vision_arm_lab.tasks.placement import PlacementConfig
 @dataclass(frozen=True)
 class SimulationConfig:
     scene_xml: str
-    table_size_m: list[float]
+    table_size_m: tuple[float, ...]
     table_height_m: float
-    friction: list[float]
+    friction: tuple[float, ...]
     cube_side_m: float
     cube_mass_kg: float
-    spawn_x_m: list[float]
-    spawn_y_m: list[float]
-    spawn_yaw_deg: list[float]
+    spawn_x_m: tuple[float, ...]
+    spawn_y_m: tuple[float, ...]
+    spawn_yaw_deg: tuple[float, ...]
     spawn_clearance_m: float
     initial_target_gap_m: float
-    target_center_m: list[float]
-    target_size_m: list[float]
-    grasp_quaternion_xyzw: list[float]
+    target_center_m: tuple[float, ...]
+    target_size_m: tuple[float, ...]
+    grasp_quaternion_xyzw: tuple[float, ...]
     camera_name: str
-    camera_position_m: list[float]
-    camera_quaternion_wxyz: list[float]
+    camera_position_m: tuple[float, ...]
+    camera_quaternion_wxyz: tuple[float, ...]
     camera_fovy_deg: float
-    camera_size_px: list[int]
+    camera_size_px: tuple[int, ...]
     camera_hz: int
     control_hz: int
     physics_hz: int
     offscreen_samples: int
+
+    def __post_init__(self):
+        # Own immutable vectors even when constructed from YAML/JSON lists.
+        for field in fields(self):
+            if field.type in (tuple[float, ...], tuple[int, ...]):
+                object.__setattr__(self, field.name, tuple(getattr(self, field.name)))
 
 
 @dataclass(frozen=True)
@@ -45,9 +51,10 @@ class SceneConfig(SimulationConfig):
     angular_speed_limit_rad_s: float
     stable_duration_s: float
     episode_timeout_s: float
-    development_seeds: list[int]
+    development_seeds: tuple[int, ...]
 
     def __post_init__(self):
+        super().__post_init__()
         if (self.physics_hz, self.control_hz, self.camera_hz) != (500, 20, 20):
             raise ValueError('Only the confirmed 500/20/20 Hz configuration is supported')
         shapes = {
