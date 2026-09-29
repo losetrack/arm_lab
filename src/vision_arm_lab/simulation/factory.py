@@ -1,13 +1,9 @@
 """The single assembly point for the supported Panda placement environment."""
-from vision_arm_lab.simulation.config import load_config
 from vision_arm_lab.simulation.control import PandaActionAdapter
-from vision_arm_lab.core.environment import Environment
-from vision_arm_lab.tasks.placement import PlacementEvaluator
-from vision_arm_lab.simulation.scene_xml import scene_asset_fingerprint
+from vision_arm_lab.core.contracts import ActionSpec, EnvironmentSpec
 
 
-def make_environment(config, *, render_mode='offscreen') -> Environment:
-    config = load_config(config)
+def make_backend(simulation, episode_timeout_s, *, render_mode='offscreen'):
     if render_mode not in ('offscreen', 'window'):
         raise ValueError('render_mode must be offscreen or window')
     # Heavy simulator imports are deferred until a real environment is requested.
@@ -15,7 +11,6 @@ def make_environment(config, *, render_mode='offscreen') -> Environment:
     from vision_arm_lab.simulation.scene import CubePlacement
     from vision_arm_lab.simulation.placement_state import read_placement_state
 
-    simulation = config.simulation
     window = render_mode == 'window'
 
     def scene_factory(seed):
@@ -28,7 +23,7 @@ def make_environment(config, *, render_mode='offscreen') -> Environment:
             camera_heights=simulation.camera_size_px[0],
             camera_widths=simulation.camera_size_px[1], camera_depths=True,
             control_freq=simulation.control_hz,
-            horizon=round(config.episode_timeout_s * simulation.control_hz),
+            horizon=round(episode_timeout_s * simulation.control_hz),
             initialization_noise=None, seed=seed, hard_reset=False,
         )
 
@@ -36,20 +31,17 @@ def make_environment(config, *, render_mode='offscreen') -> Environment:
         scene_factory, camera_name=simulation.camera_name,
         adapter=PandaActionAdapter(simulation.grasp_quaternion_xyzw), window=window,
     )
-    return Environment(
-        backend, PlacementEvaluator(config.placement),
-        lambda: read_placement_state(backend.env), config.spec, render_mode=render_mode,
+    return backend, lambda: read_placement_state(backend.env)
+
+
+def describe_environment(simulation, task_info, episode_timeout_s):
+    return EnvironmentSpec(
+        action_spec=ActionSpec(), camera_names=(simulation.camera_name,),
+        camera_size_px=simulation.camera_size_px,
+        joint_names=tuple(f'robot0_joint{i}' for i in range(1, 8)),
+        capabilities=frozenset({'rgb', 'depth', 'calibration', 'robot_state', 'language'}),
+        task=task_info, episode_timeout_s=episode_timeout_s,
     )
-
-
-def make_recorded_environment(metadata, *, render_mode='offscreen') -> Environment:
-    """Rebuild a recorded scene using its snapshot, after checking its assets."""
-    from vision_arm_lab.simulation.config import SceneConfig
-
-    snapshot = metadata['scene']
-    if metadata['scene_asset_sha256'] != scene_asset_fingerprint(snapshot['scene_xml']):
-        raise ValueError('Replay requires the recorded scene asset versions')
-    return make_environment(SceneConfig(**snapshot), render_mode=render_mode)
 
 
 def make_expert_locator(environment):

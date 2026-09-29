@@ -6,14 +6,16 @@ from time import sleep
 import numpy as np
 from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec
 from vision_arm_lab.recording.provenance import fingerprint
-from vision_arm_lab.simulation.factory import make_recorded_environment
+from vision_arm_lab.application import make_recorded_environment
 
 
 def load_episode(directory):
     directory = Path(directory)
     metadata = json.loads((directory.parent / 'metadata.json').read_text())
     result = json.loads((directory / 'result.json').read_text())
-    if metadata.get('format') != 'vision-arm-lab-v1' or not result['recording']['actions_complete']:
+    if metadata.get('format') != 'vision-arm-lab-v2':
+        raise ValueError('Replay requires vision-arm-lab-v2 records; use the matching old version for v1')
+    if not result['recording']['actions_complete']:
         raise ValueError('Replay requires a complete action record')
     current = fingerprint()
     if metadata['packages'] != current['packages'] or metadata['source_sha256'] != current['source_sha256']:

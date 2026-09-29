@@ -12,10 +12,10 @@ from vision_arm_lab import (
     Action, ActionChunk, CameraObservation, Environment, Observation, RobotState,
     PolicyFailure, RecordOptions, evaluate, run_episode,
 )
-from vision_arm_lab.simulation.config import load_config
+from vision_arm_lab.configuration import load_config
 from vision_arm_lab.simulation.control import PandaActionAdapter
 from vision_arm_lab.algorithms.policies import HoldPolicy
-from vision_arm_lab.tasks.placement import ObjectState, PlacementEvaluator
+from vision_arm_lab.tasks.placement import ObjectState, PlacementTask
 
 CONFIG = Path(__file__).resolve().parents[2] / 'configs/mvp.yaml'
 
@@ -60,7 +60,7 @@ def fixture_environment():
     config = load_config(CONFIG)
     spec = replace(config.spec, camera_size_px=(2, 3))
     backend = PhysicsStub(spec)
-    evaluator = PlacementEvaluator(config.placement)
+    evaluator = PlacementTask(config.task, config.simulation.camera_name)
     state = ObjectState(np.array([0.1, 0.15, 0.82]), np.eye(3), np.zeros(3), np.zeros(3), False)
     return Environment(backend, evaluator, lambda: state, spec), backend
 
@@ -210,7 +210,7 @@ def test_callback_failure_is_visible_and_closes_environment(monkeypatch):
                                     dict(spawn_x_m=[1, 0]), dict(cube_side_m=-1)])
 def test_config_validation_precedes_simulation(changes):
     with pytest.raises(ValueError):
-        replace(load_config(CONFIG), **changes)
+        replace(load_config(CONFIG).simulation, **changes)
 
 
 @pytest.mark.parametrize('reason', ['success', 'timeout', 'environment_error', 'localization_failed'])

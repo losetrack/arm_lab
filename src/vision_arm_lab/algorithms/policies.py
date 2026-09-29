@@ -1,7 +1,9 @@
 """Shared grasp state machine; localization is the expert/vision difference."""
 from dataclasses import dataclass
 import numpy as np
-from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec, PolicyFailure, TaskInfo
+from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec, PolicyFailure
+
+from vision_arm_lab.tasks.placement import PlacementTaskInfo
 
 
 @dataclass(frozen=True)
@@ -26,7 +28,7 @@ class GraspPolicy:
     required_inputs = frozenset({"robot_state"})
     phases = ("settle", "approach", "descend", "close", "lift", "transfer", "lower", "release", "retreat", "wait")
 
-    def __init__(self, task: TaskInfo, locate, config=GraspConfig()):
+    def __init__(self, task: PlacementTaskInfo, locate, config=GraspConfig()):
         self.task = task
         self.locate = locate
         self.config = config

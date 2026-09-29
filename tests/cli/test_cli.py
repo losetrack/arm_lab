@@ -59,6 +59,6 @@ def test_doctor_reports_version_mismatch_without_creating_environment(monkeypatc
     monkeypatch.setattr('vision_arm_lab.cli.diagnostics.version', lambda name: '0.2.0' if name == 'vision-arm-lab' else '2.0.0')
     def forbidden(*args, **kwargs):
         raise AssertionError('Do not create a rendering context with mismatched dependencies')
-    monkeypatch.setattr('vision_arm_lab.simulation.factory.make_environment', forbidden)
+    monkeypatch.setattr('vision_arm_lab.application.make_environment', forbidden)
     report = doctor(config='unused')
     assert report['checks'] == [{'component': 'numpy', 'version': '2.0.0', 'required': '==1.26.4', 'ok': False}]

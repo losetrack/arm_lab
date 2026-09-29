@@ -24,9 +24,9 @@ with make_environment("configs/mvp.yaml", render_mode="offscreen") as env:
             break
 ```
 
-`config` 接受 YAML 路径或 `SceneConfig`。相对路径以调用进程当前工作目录为基准；从其他目录运行时传绝对路径。工厂组装组件，但直到 `reset` 才创建物理环境和渲染上下文。
+`config` 接受 YAML 路径或 `configuration.EnvironmentConfig`。相对路径以调用进程当前工作目录为基准；从其他目录运行时传绝对路径。工厂组装组件，但直到 `reset` 才创建物理环境和渲染上下文。
 
-配置中的数值向量和开发种子在加载时转换为不可变元组；YAML/JSON 中仍使用数组。修改运行参数时可用 `dataclasses.replace` 创建并校验新配置，修改派生的物理参数仍需编辑 XML 后重新加载。配置视图与公开规格不会受原始输入列表的后续修改影响。
+配置中的数值向量和开发种子在加载时转换为不可变元组；YAML/JSON 中仍使用数组。修改运行参数时可用 `dataclasses.replace(config.simulation, ...)` 或 `dataclasses.replace(config.task, ...)` 创建配置，再用 `dataclasses.replace(config, simulation=..., task=...)` 组合并校验，修改派生的物理参数仍需编辑 XML 后重新加载。配置视图与公开规格不会受原始输入列表的后续修改影响。
 
 | 能力 | 语义 |
 | --- | --- |
@@ -58,10 +58,12 @@ Observation 是一次采样快照，读取多个字段不会推进仿真。数�
 | `.eef_position_m` / `.eef_quaternion_xyzw` | `(3,)` 世界坐标位置 / `(4,)` xyzw 四元数，同一末端控制 site |
 | `.gripper_position_m` | `(2,)` 两指关节位置，米 |
 | `obs.timestamp_s` | 本次环境观测的仿真时间 |
+| `obs.task_context` | TaskContext：任务标识、种子、该回合公开目标和语言指令 |
+| `obs.language_instruction` | 与 task_context 中的指令一致，供语言条件策略使用 |
 
 RGB/深度的契约允许 None 表示缺失；当前后端提供两者。算法声明的输入若不受支持或首次观测缺失，评测会明确报告。当前每个控制步更新一份 20 Hz 的 RGB-D/机器人观测，物理仿真为 500 Hz。
 
-公开任务先验在 `env.spec.task`：`camera_name`、`table_height_m`、`cube_side_m`、`target_center_m`、`target_size_m`。其中没有随机采样的方块位姿、接触状态或其他真值。
+当前 placement 的公开先验类型为 `tasks.placement.PlacementTaskInfo`，在 `env.spec.task` 中提供：`camera_name`、`table_height_m`、`cube_side_m`、`target_center_m`、`target_size_m`。其中没有随机采样的方块位姿、接触状态或其他真值。
 
 T03 动作保持不变：
 
@@ -91,7 +93,7 @@ print(report.summary)
 
 工厂在一次 evaluate 中构造一个策略，每个回合调用一次 `reset()`。算法应在 reset 中清空回合状态；自己的模型、参数和随机数管理由算法负责。工厂只接收公开规格，不接收后端。
 
-`required_inputs` 是传感器名称的 frozenset，可使用 `rgb`、`depth`、`calibration`、`robot_state`。构造时读取 TaskInfo 所需先验；不要在这个集合里混入内部定位模块或不受支持的真值字段。
+`required_inputs` 是传感器名称的 frozenset，可使用 `rgb`、`depth`、`calibration`、`robot_state`、`language`。构造时读取 TaskInfo 所需先验；不要在这个集合里混入内部定位模块或不受支持的真值字段。
 
 预期算法失败可以 `raise PolicyFailure("localization_failed")`，回合 `status` 固定为 `policy_failure`，消息写入 `failure_reason`，不会被解释为任务状态。意外算法异常记录为 `policy_error`；后端异常为 `environment_error`；中断为 `interrupted`。不会替换失败种子或自动重试。
 
@@ -99,7 +101,7 @@ print(report.summary)
 
 ## 只替换视觉定位器
 
-`locator_factory(TaskInfo)` 返回一个可调用定位器，接受 Observation，返回世界坐标下的三维方块中心；声明其需要的 `required_inputs`。调用：
+`locator_factory(PlacementTaskInfo)` 返回一个可调用定位器，接受 Observation，返回世界坐标下的三维方块中心；声明其需要的 `required_inputs`。调用：
 
 ```python
 report = evaluate(
@@ -149,17 +151,18 @@ report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options
 
 新增的 `run_episode(env, policy, seed, steps, on_transition=...)` 可用于自行组合环境与消费者。Transition 含步号、执行前观测、动作、执行后观测和任务结果，第一步的执行前观测就是 reset 返回值。该函数不拥有传入环境的生命周期，调用者负责 `with`/close；外部回调异常原样传播。
 
-现有 v1 磁盘记录仍保存动作与执行后观测，初始观测不单独保存；本轮没有变更它的训练含义。自定义算法的参数、代码版本等可通过 `evaluate(..., policy_metadata={...})` 显式记录；自动源码指纹覆盖项目包，不自动扫描算法的外部依赖代码。
+本轮记录格式为 v2：元数据新增任务标识、规则版本、独立任务配置；回合结果新增 task_id、task_context 和 task_metrics。动作与执行后观测的时序沿用原格式，初始观测不单独保存，仍属于调试记录。v1 记录需要匹配的旧代码回放，不自动猜测任务或迁移。自定义算法的参数、代码版本等可通过 `evaluate(..., policy_metadata={...})` 显式记录；自动源码指纹覆盖项目包，不自动扫描算法的外部依赖代码。
 
 ## 内部边界与迁移
 
 | 模块 | 职责 |
 | --- | --- |
 | `core/` | `contracts.py` 定义公共数据、动作规范化、单位和时序；`environment.py` 管理通用生命周期，不解析 YAML/XML 或导入仿真模块 |
-| `simulation/` | `config.py` 加载 YAML 并生成配置和公开规格；`scene_xml.py` 解析 XML、定位资源和生成资源指纹；`factory.py` 组装环境及恢复记录中的场景；`scene.py`、`robosuite.py`、`control.py` 实现场景、物理、传感器与控制；`placement_state.py` 读取私有真值 |
+| `simulation/` | `config.py` 校验物理配置和恢复场景快照；`scene_xml.py` 读取 XML 与资源，`placement_xml.py` 提取放置几何；`factory.py` 创建后端与私有状态读取器；`scene.py`、`robosuite.py`、`control.py` 实现场景、物理、传感器与控制；`placement_state.py` 读取私有真值 |
 | `algorithms/` | `perception.py` 实现颜色定位；`policies.py` 实现保持与抓放策略，通过公共观测和动作契约工作 |
-| `tasks/` | `placement.py` 定义 PlacementConfig 并实现纯任务判定，不直接访问仿真器 |
-| `application.py` | 公共 `evaluate` 入口，读取仿真配置、选择算法、组装环境和记录器；从实际算法实例收集配置元数据 |
+| `tasks/` | `placement.py` 定义 PlacementTask、PlacementTaskInfo、PlacementConfig、PlacementResult；任务拥有指令、公开上下文和判定规则，不导入仿真器 |
+| `application.py` | 公共 make_environment / evaluate 入口及回放组装，选择任务、算法并连接组件 |
+| `configuration.py` / `task_registry.py` | 加载和拆分运行配置；显式配方连接纯任务与对应仿真适配，校验任务版本及共享物理参数 |
 | `evaluation.py` | 单回合及批量执行、失败分类、成功率等指标；消费已组装组件，不导入仿真、算法实现或记录器实现 |
 | `recording/` | `recorder.py` 消费 Transition、管理文件预算、保存调用方提供的结果与指标；`provenance.py` 生成版本指纹；`replay.py` 校验并重放完整动作记录 |
 | `cli/` | 参数解析、用户指定模块导入、安装诊断、终端输出与退出码；复用公共 API |
@@ -171,11 +174,11 @@ report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options
 
 评测层负责执行步数、任务结果和汇总指标；记录器保留这些字段，仅补充记录状态。动作记录不依赖相机；当前图像和视频记录仍使用观测中的第一台相机，未扩展多相机选择接口。
 
-场景记录由 `SceneConfig.record_metadata()` 生成，回放通过 `simulation.factory.make_recorded_environment()` 恢复。评测和记录模块不自行解析 XML、定位资源或解释场景几何；算法只接收公开 TaskInfo，不持有 SceneConfig。
+任务和场景元数据由 `EnvironmentConfig.record_metadata()` 汇集；回放通过 `application.make_recorded_environment()` 选择相同配方，其中 XML 和资源恢复继续委托仿真层。算法只接收公开 TaskInfo / TaskContext，不持有运行配置。
 
 目录整理后，内部导入路径随功能迁移，例如 `vision_arm_lab.perception` 改为 `vision_arm_lab.algorithms.perception`。场景配置与 XML 解析进一步从 `core.config`、`core.scene_xml` 移到 `simulation.config`、`simulation.scene_xml`。外部代码若直接导入旧内部模块，需更新路径。顶层公共导出和现有命令参数保持不变。
 
-本轮 `evaluate` 实现从 `evaluation.py` 移到 `application.py`；外部调用推荐继续使用 `from vision_arm_lab import evaluate`。内部 `Recorder.finish` 改为接收已计算的指标字典，记录格式保持 v1。
+本轮 `evaluate` 实现从 `evaluation.py` 移到 `application.py`；外部调用推荐继续使用 `from vision_arm_lab import evaluate`。内部 `Recorder.finish` 接收已计算的指标字典。任务独立阶段新增 v2 记录格式。
 
 从 MVP 迁移需要注意：
 
@@ -184,3 +187,18 @@ report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options
 - `final_phase/phases` 移入结果的 `policy_diagnostics`；GL 信息在 `env.diagnostics['gl_renderer']`；新算法错误单独标记 policy_error。
 - 观测数组变为只读，修改前先复制。
 - 回放复用公共环境工厂。源码指纹现在以包内相对路径计算，正式安装包也可记录；旧版本记录按原有严格匹配规则被拒绝，若需重放应在匹配的旧代码/依赖环境执行。
+
+
+## 任务独立与扩展
+
+现有配置可选增加 `task_id: placement`；未指定时明确使用原 placement。当前仅注册这一项，未知任务启动时报错。`vision`、`expert` 和 `locator_factory` 限用于 placement；新任务可使用完整 `policy_factory`，`inspect` 仍只保持机器人状态。
+
+核心 Task 协议只包含 `info`、`reset(seed, state, observation) -> TaskContext`、`update(state, observation, actions) -> TaskResult`。state 由仿真适配读取且只传入任务；reset 在后端完成重置后运行，生成当前回合的公开目标。核心每次返回观测时附加同一回合上下文，不解释夹爪、方块或目标区。
+
+上下文目标使用任务自己的不可变 TaskInfo 子类，其字段应能转换为 JSON 数据；任务指标使用名称到数值的映射。上下文在回合内固定，在线修改目标与 VLA 动作序列失效规则不在本阶段范围内。
+
+`TaskInfo` 现在是只含 task_id 的通用基类；原方块字段移到 PlacementTaskInfo。`TaskResult` 包含 status、elapsed_s 和只读 metrics；放置任务返回 PlacementResult，仍可读取 `.stable_s`，也可通过 `metrics['stable_s']` 获取。直接构造旧 TaskInfo/TaskResult 或 Environment 的代码需要适配新任务类型和 Task 协议，顶层 make_environment / evaluate 的调用签名保持不变。
+
+新增任务需要：在 tasks 定义类型明确的规则与公开先验；在 simulation 提供必要的场景加载、后端和状态读取；在应用层 task_registry.RECIPES 添加 TaskRecipe。配方显式声明任务配置类型、来自场景的物理字段、场景加载/快照恢复/元数据、后端构造和公开规格构造。任务规则不导入 XML，任务标识不进入核心或通用评测循环。
+
+`configuration.load_config` 取代原 `simulation.config.load_config`；内部配置现在通过 `.simulation`、`.task` 和 `.development_seeds` 访问。既有平铺 YAML 保持可读，未知字段仍报错；内部已经分离配置职责，后续需要嵌套 YAML 时另行明确迁移。

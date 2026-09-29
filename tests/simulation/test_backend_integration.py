@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from vision_arm_lab.simulation.config import load_config
+from vision_arm_lab.configuration import load_config
 from vision_arm_lab.core.contracts import Action, ActionChunk
 
 pytestmark = pytest.mark.integration
@@ -84,10 +84,10 @@ def test_physical_placement_success_reset_and_timeout(backend):
     with pytest.raises(RuntimeError, match="Episode ended"):
         backend.step(hold(backend))
     backend.reset(0)
-    assert backend._evaluator.result.status == "running"
+    assert backend._task.evaluator.result.status == "running"
     # Shorten only this test's horizon to check termination wiring. Unit tests
     # separately cover the production 60-second threshold exactly.
-    backend._evaluator.config = replace(backend._evaluator.config, episode_timeout_s=0.1)
+    backend._task.evaluator.config = replace(backend._task.evaluator.config, episode_timeout_s=0.1)
     backend.step(hold(backend))
     result = backend.step(hold(backend)).task_result
     assert result.status == "timeout"

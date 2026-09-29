@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from vision_arm_lab import make_environment
-from vision_arm_lab.simulation.config import load_config
+from vision_arm_lab.configuration import load_config
 
 pytestmark = pytest.mark.integration
 

@@ -6,7 +6,7 @@ import pytest
 
 from vision_arm_lab.application import assemble_policy
 from vision_arm_lab.algorithms.policies import HoldPolicy
-from vision_arm_lab.simulation.config import load_config
+from vision_arm_lab.configuration import load_config
 
 
 @pytest.mark.parametrize('mode', ['inspect', 'vision', 'expert', 'custom', 'custom_locator'])

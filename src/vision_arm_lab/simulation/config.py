@@ -1,14 +1,11 @@
 """Explicit configuration for the confirmed single-scene MVP."""
 
 from dataclasses import asdict, dataclass, fields
-from pathlib import Path
 
 import numpy as np
-import yaml
 
-from vision_arm_lab.core.contracts import ActionSpec, EnvironmentSpec, TaskInfo
-from vision_arm_lab.simulation.scene_xml import read_scene_xml, scene_parameters, scene_asset_fingerprint
-from vision_arm_lab.tasks.placement import PlacementConfig
+from vision_arm_lab.simulation.scene_xml import read_scene_xml, scene_asset_fingerprint
+from vision_arm_lab.simulation.placement_xml import scene_parameters
 
 
 @dataclass(frozen=True)
@@ -43,18 +40,6 @@ class SimulationConfig:
             if field.type in (tuple[float, ...], tuple[int, ...]):
                 object.__setattr__(self, field.name, tuple(getattr(self, field.name)))
 
-
-@dataclass(frozen=True)
-class SceneConfig(SimulationConfig):
-    bottom_tolerance_m: float
-    linear_speed_limit_m_s: float
-    angular_speed_limit_rad_s: float
-    stable_duration_s: float
-    episode_timeout_s: float
-    development_seeds: tuple[int, ...]
-
-    def __post_init__(self):
-        super().__post_init__()
         if (self.physics_hz, self.control_hz, self.camera_hz) != (500, 20, 20):
             raise ValueError('Only the confirmed 500/20/20 Hz configuration is supported')
         shapes = {
@@ -67,13 +52,11 @@ class SceneConfig(SimulationConfig):
             value = np.asarray(getattr(self, name), dtype=float)
             if value.shape != (size,) or not np.isfinite(value).all():
                 raise ValueError(f'{name} must contain {size} finite values')
-        for name in ('cube_side_m', 'cube_mass_kg', 'table_height_m', 'camera_fovy_deg',
-                     'stable_duration_s', 'episode_timeout_s'):
+        for name in ('cube_side_m', 'cube_mass_kg', 'table_height_m', 'camera_fovy_deg'):
             value = getattr(self, name)
             if not np.isfinite(value) or value <= 0:
                 raise ValueError(f'{name} must be finite and positive')
-        for name in ('bottom_tolerance_m', 'linear_speed_limit_m_s',
-                     'angular_speed_limit_rad_s', 'spawn_clearance_m', 'initial_target_gap_m'):
+        for name in ('spawn_clearance_m', 'initial_target_gap_m'):
             value = getattr(self, name)
             if not np.isfinite(value) or value < 0:
                 raise ValueError(f'{name} must be finite and nonnegative')
@@ -99,47 +82,13 @@ class SceneConfig(SimulationConfig):
             if not np.array_equal(np.asarray(getattr(self, name)), np.asarray(value)):
                 raise ValueError(f'{name} must match scene XML; modify XML instead of derived fields')
 
-    def record_metadata(self):
-        """Capture the scene and its resources without exposing XML to consumers."""
-        return {'scene': asdict(self),
-                'scene_asset_sha256': scene_asset_fingerprint(self.scene_xml)}
 
-    @property
-    def simulation(self) -> SimulationConfig:
-        return SimulationConfig(**{f.name: getattr(self, f.name) for f in fields(SimulationConfig)})
-
-    @property
-    def placement(self) -> PlacementConfig:
-        values = {f.name: getattr(self, f.name) for f in fields(PlacementConfig)}
-        values['target_center_m'] = tuple(self.target_center_m)
-        values['target_size_m'] = tuple(self.target_size_m)
-        return PlacementConfig(**values)
-
-    @property
-    def spec(self) -> EnvironmentSpec:
-        return EnvironmentSpec(
-            action_spec=ActionSpec(), camera_names=(self.camera_name,),
-            camera_size_px=tuple(self.camera_size_px),
-            joint_names=tuple(f'robot0_joint{i}' for i in range(1, 8)),
-            capabilities=frozenset({'rgb', 'depth', 'calibration', 'robot_state'}),
-            task=TaskInfo(self.camera_name, self.table_height_m, self.cube_side_m,
-                          tuple(self.target_center_m), tuple(self.target_size_m)),
-            episode_timeout_s=self.episode_timeout_s,
-        )
-
-
-def load_config(path: str | Path | SceneConfig) -> SceneConfig:
-    if isinstance(path, SceneConfig):
-        return path
-    path = Path(path)
-    with path.open() as stream:
-        values = yaml.safe_load(stream)
-    if not isinstance(values, dict):
-        raise ValueError('Scene configuration must be a YAML mapping')
+def load_simulation_config(values, directory):
+    values = dict(values)
     scene_path = values.pop('scene_xml', None)
     if scene_path is not None and not isinstance(scene_path, str):
         raise ValueError('scene_xml must be a file path relative to the YAML file')
-    snapshot = read_scene_xml(path.parent / scene_path if scene_path is not None else None)
+    snapshot = read_scene_xml(directory / scene_path if scene_path is not None else None)
     if 'camera_name' not in values:
         raise ValueError('Scene configuration requires camera_name')
     parameters = scene_parameters(snapshot, values['camera_name'])
@@ -147,7 +96,16 @@ def load_config(path: str | Path | SceneConfig) -> SceneConfig:
     if duplicates:
         raise ValueError(f'Physical parameters belong in scene XML, not YAML: {sorted(duplicates)}')
     values.update(parameters, scene_xml=snapshot)
-    try:
-        return SceneConfig(**values)
-    except TypeError as exc:
-        raise ValueError(f'Invalid scene configuration: {exc}') from exc
+    return SimulationConfig(**values)
+
+
+def simulation_metadata(config):
+    return {'scene': asdict(config),
+            'scene_asset_sha256': scene_asset_fingerprint(config.scene_xml)}
+
+
+def restore_simulation_config(metadata):
+    snapshot = metadata['scene']
+    if metadata['scene_asset_sha256'] != scene_asset_fingerprint(snapshot['scene_xml']):
+        raise ValueError('Replay requires the recorded scene asset versions')
+    return SimulationConfig(**snapshot)

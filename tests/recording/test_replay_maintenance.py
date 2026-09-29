@@ -10,7 +10,7 @@ from vision_arm_lab.cli.maintenance import main as cleanup
 
 @pytest.fixture
 def episode(tmp_path):
-    metadata = {'format': 'vision-arm-lab-v1', **fingerprint(), 'action_spec': asdict(ActionSpec())}
+    metadata = {'format': 'vision-arm-lab-v2', **fingerprint(), 'action_spec': asdict(ActionSpec())}
     (tmp_path / 'metadata.json').write_text(json.dumps(metadata))
     folder = tmp_path / 'episode_0000'
     folder.mkdir()
@@ -27,12 +27,22 @@ def test_replay_rejects_incomplete_and_different_versions(episode):
     path.write_text('')
     with pytest.raises(ValueError, match='incomplete'):
         load_episode(episode)
+
     path.write_text(original)
     meta_path = episode.parent / 'metadata.json'
     metadata = json.loads(meta_path.read_text())
     metadata['packages']['mujoco'] = 'not-the-recorded-version'
     meta_path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match='versions'):
+        load_episode(episode)
+
+
+def test_replay_requires_explicit_task_record_format(episode):
+    path = episode.parent / 'metadata.json'
+    metadata = json.loads(path.read_text())
+    metadata['format'] = 'vision-arm-lab-v1'
+    path.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match='matching old version'):
         load_episode(episode)
 
 

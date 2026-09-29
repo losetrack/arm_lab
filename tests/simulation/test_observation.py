@@ -37,7 +37,8 @@ def test_sensor_allowlist_pixel_convention_and_owned_arrays(monkeypatch):
     np.testing.assert_array_equal(camera.intrinsics[:2, 2], [1, 0.5])
     np.testing.assert_array_equal(obs.robot.eef_quaternion_xyzw, [1, 0, 0, 0])
     assert obs.timestamp_s == camera.timestamp_s == 0.05
-    assert set(vars(obs)) == {"cameras", "robot", "timestamp_s", "language_instruction"}
+    assert set(vars(obs)) == {"cameras", "robot", "timestamp_s", "language_instruction", "task_context"}
+    assert obs.task_context is None  # The task, not the sensor backend, supplies public goals.
     raw["agentview_image"][:] = 0
     raw["robot0_eef_pos"][:] = 0
     assert camera.rgb.any()

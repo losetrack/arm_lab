@@ -1,12 +1,12 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from vision_arm_lab.core.contracts import TaskInfo
+from vision_arm_lab.tasks.placement import PlacementTaskInfo
 from vision_arm_lab.algorithms.policies import GraspPolicy, PolicyFailure
 
 
 def task():
-    return TaskInfo('agentview', 0.8, 0.04, (0.1, 0.15), (0.12, 0.12))
+    return PlacementTaskInfo('placement', 'agentview', 0.8, 0.04, (0.1, 0.15), (0.12, 0.12))
 
 
 def observation(time, position=(0, 0, 1), gap=0.08):

@@ -3,8 +3,23 @@ from dataclasses import asdict
 
 from vision_arm_lab.evaluation import EvaluationReport, run_evaluation, validate_policy
 from vision_arm_lab.recording.recorder import Recorder, RecordOptions
-from vision_arm_lab.simulation.config import load_config
-from vision_arm_lab.simulation.factory import make_environment, make_expert_locator
+from vision_arm_lab.configuration import load_config, restore_config
+from vision_arm_lab.core.environment import Environment
+from vision_arm_lab.task_registry import get_recipe
+from vision_arm_lab.simulation.factory import make_expert_locator
+
+
+def make_environment(config, *, render_mode='offscreen'):
+    config = load_config(config)
+    recipe = get_recipe(config.task_id)
+    task = recipe.make_task(config.task, config.simulation)
+    spec = recipe.describe(config.simulation, task.info, config.task.episode_timeout_s)
+    backend, read_state = recipe.make_backend(config.simulation, spec.episode_timeout_s, render_mode=render_mode)
+    return Environment(backend, task, read_state, spec, render_mode=render_mode)
+
+
+def make_recorded_environment(metadata, *, render_mode='offscreen'):
+    return make_environment(restore_config(metadata), render_mode=render_mode)
 
 
 def assemble_policy(mode, environment, *, policy_factory=None, locator_factory=None):
@@ -16,6 +31,8 @@ def assemble_policy(mode, environment, *, policy_factory=None, locator_factory=N
 
     if mode == 'inspect':
         return HoldPolicy(environment.spec), {}
+    if environment.spec.task.task_id != 'placement':
+        raise ValueError('Built-in grasp policies and locator_factory require the placement task')
     metadata = {}
     if locator_factory is not None:
         locate = locator_factory(environment.spec.task)

@@ -122,7 +122,7 @@ class Recorder:
             try:
                 root.mkdir(parents=True, exist_ok=False)
                 self.root = root
-                self._json(root / 'metadata.json', {'format': 'vision-arm-lab-v1', **metadata})
+                self._json(root / 'metadata.json', {'format': 'vision-arm-lab-v2', **metadata})
             except OSError as exc:
                 self.warn(f'cannot create recording directory: {exc}')
 
@@ -236,7 +236,7 @@ class Recorder:
             self.stream.write(rgb)
 
     def record_transition(self, transition):
-        """v1 files intentionally retain action + post-step observation semantics."""
+        """v2 retains the action + post-step observation timing of v1."""
         self.step(transition.action, transition.observation_after)
 
     def end_episode(self, result):

@@ -6,9 +6,9 @@ _MODULES = {
     **dict.fromkeys((
         'Action', 'ActionChunk', 'ActionSpec', 'CameraObservation', 'EnvironmentSpec',
         'Observation', 'Policy', 'PolicyFailure', 'RobotState', 'StepResult',
-        'TaskInfo', 'TaskResult', 'Transition',
+        'TaskInfo', 'TaskContext', 'Task', 'TaskResult', 'Transition',
     ), 'core.contracts'),
-    'Environment': 'core.environment', 'make_environment': 'simulation.factory',
+    'Environment': 'core.environment', 'make_environment': 'application',
     'EvaluationReport': 'evaluation', 'evaluate': 'application',
     'run_episode': 'evaluation', 'RecordOptions': 'recording.recorder',
 }

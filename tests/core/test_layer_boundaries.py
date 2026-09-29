@@ -9,7 +9,7 @@ def test_core_and_algorithms_do_not_import_simulation():
     package = Path(__file__).resolve().parents[2] / 'src/vision_arm_lab'
     forbidden = ('vision_arm_lab.simulation', 'robosuite', 'mujoco', 'OpenGL',
                  'xml', 'yaml')
-    for layer in ('core', 'algorithms'):
+    for layer in ('core', 'algorithms', 'tasks'):
         for path in (package / layer).rglob('*.py'):
             for node in ast.walk(ast.parse(path.read_text())):
                 names = ([node.module or ''] if isinstance(node, ast.ImportFrom) else

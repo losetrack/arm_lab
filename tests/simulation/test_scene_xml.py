@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import pytest
 import yaml
 
-from vision_arm_lab.simulation.config import SceneConfig, load_config
+from vision_arm_lab.configuration import load_config, restore_config
 
 
 def test_relative_xml_and_derived_task_priors(custom_scene, monkeypatch):
@@ -16,39 +16,43 @@ def test_relative_xml_and_derived_task_priors(custom_scene, monkeypatch):
     monkeypatch.chdir('/')
     config = load_config(config_file)
     assert config.spec.task.target_center_m == (0.14, 0.16)
-    assert config.placement.target_center_m == (0.14, 0.16)
-    assert config.camera_fovy_deg == 55
-    assert config.cube_side_m == 0.04
-    assert config.cube_mass_kg == pytest.approx(0.1)
-    assert config.physics_hz == 500
+    assert config.task.target_center_m == (0.14, 0.16)
+    assert config.simulation.camera_fovy_deg == 55
+    assert config.simulation.cube_side_m == 0.04
+    assert config.simulation.cube_mass_kg == pytest.approx(0.1)
+    assert config.simulation.physics_hz == 500
 
 
 def test_snapshot_survives_source_removal_and_metadata_roundtrip(custom_scene):
     config_file, xml_file, _ = custom_scene
     config = load_config(config_file)
     xml_file.unlink()
-    restored = SceneConfig(**asdict(config))
+    restored = restore_config(config.record_metadata())
     assert restored == config
     assert load_config(restored) is restored
     with pytest.raises(FileNotFoundError):
         load_config(config_file)
     with pytest.raises(ValueError, match='must match scene XML'):
-        replace(config, cube_side_m=0.06)
+        replace(config.simulation, cube_side_m=0.06)
 
 
 def test_configuration_vectors_are_owned_immutable_snapshots(custom_scene):
     config = load_config(custom_scene[0])
-    values = json.loads(json.dumps(asdict(config)))
-    restored = SceneConfig(**values)
-    simulation, spec, placement = restored.simulation, restored.spec, restored.placement
-    for name, value in values.items():
+    values = json.loads(json.dumps(config.record_metadata()))
+    restored = restore_config(values)
+    simulation, spec, placement = restored.simulation, restored.spec, restored.task
+    for name, value in values['scene'].items():
         if isinstance(value, list):
             value[0] += 1
-            assert getattr(restored, name) == getattr(config, name)
+            assert getattr(simulation, name) == getattr(config.simulation, name)
             with pytest.raises(TypeError):
-                getattr(restored, name)[0] = value[0]
+                getattr(simulation, name)[0] = value[0]
+    values['task']['config']['target_center_m'][0] += 1
+    values['evaluation']['development_seeds'][0] += 1
+    assert restored.task.target_center_m == config.task.target_center_m
+    assert restored.development_seeds == config.development_seeds
     assert simulation.target_center_m == spec.task.target_center_m == placement.target_center_m
-    assert SceneConfig(**restored.record_metadata()['scene']) == config
+    assert restore_config(restored.record_metadata()) == config
 
 
 def test_duplicate_physical_yaml_parameter_is_rejected(custom_scene):
@@ -84,7 +88,7 @@ def test_custom_asset_path_is_relative_to_xml(custom_scene):
     config_file, xml_file, tree = custom_scene
     tree.find("asset/texture[@name='texplane']").set('file', 'textures/floor.png')
     tree.write(xml_file)
-    snapshot = ET.fromstring(load_config(config_file).scene_xml)
+    snapshot = ET.fromstring(load_config(config_file).simulation.scene_xml)
     assert snapshot.find("asset/texture[@name='texplane']").get('file') == str(xml_file.parent / 'textures/floor.png')
 
 

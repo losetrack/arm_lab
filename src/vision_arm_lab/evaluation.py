@@ -1,5 +1,5 @@
 """Simulator-independent episode execution and the public evaluation API."""
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import monotonic, sleep
 from typing import Callable
@@ -41,6 +41,8 @@ def validate_policy(policy, spec):
 
 
 def validate_inputs(policy, observation):
+    if 'language' in policy.required_inputs and not observation.language_instruction:
+        raise ValueError('Actual observation is missing language instruction')
     for name in policy.required_inputs & {'rgb', 'depth', 'calibration'}:
         field = {'rgb': 'rgb', 'depth': 'depth_m', 'calibration': 'intrinsics'}[name]
         if not observation.cameras or any(getattr(camera, field) is None for camera in observation.cameras.values()):
@@ -65,12 +67,15 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
     phase = 'reset'
     status = 'running'
     task_status = None
+    task_metrics = {}
+    task_context = None
     failure_reason = None
     error = None
     diagnostic = {}
     previous_diagnostic = None
     try:
         observation = environment.reset(seed)
+        task_context = asdict(observation.task_context) if observation.task_context is not None else None
         task_status = 'running'
         phase = 'policy'
         validate_inputs(policy, observation)
@@ -90,6 +95,7 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
             executed = index
             status = step.task_result.status
             task_status = step.task_result.status
+            task_metrics = dict(step.task_result.metrics)
             if on_transition is not None:
                 phase = 'callback'
                 on_transition(Transition(index, before, actions, observation, step.task_result))
@@ -116,6 +122,8 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
     result = {
         'seed': seed, 'mode': mode, 'status': status, 'steps': executed,
         'task_status': task_status,
+        'task_id': environment.spec.task.task_id,
+        'task_context': task_context, 'task_metrics': task_metrics,
         'sim_time_s': observation.timestamp_s if observation is not None else None,
         'wall_time_s': monotonic() - start,
         'observation_source': 'object ground truth and robot sensors' if mode == 'expert' else 'public sensors and declared task priors',

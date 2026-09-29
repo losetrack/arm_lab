@@ -10,7 +10,7 @@ def main():
     parser.add_argument('--delete', action='store_true')
     args = parser.parse_args()
     root = Path(args.run)
-    if json.loads((root / 'metadata.json').read_text()).get('format') != 'vision-arm-lab-v1':
+    if json.loads((root / 'metadata.json').read_text()).get('format') not in ('vision-arm-lab-v1', 'vision-arm-lab-v2'):
         raise ValueError('Not a recognized recording directory')
     for path in sorted(root.glob('episode_[0-9][0-9][0-9][0-9]/.tmp-video-*.mp4')):
         print(path)

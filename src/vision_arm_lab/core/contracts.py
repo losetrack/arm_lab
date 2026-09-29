@@ -1,6 +1,6 @@
 """Simulator-independent T03 contracts. All physical values use SI units."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from operator import index
 from types import MappingProxyType
 from typing import Mapping, Protocol, runtime_checkable
@@ -58,6 +58,7 @@ class Observation:
     robot: RobotState
     timestamp_s: float
     language_instruction: str | None = None
+    task_context: 'TaskContext | None' = None
 
     def __post_init__(self):
         object.__setattr__(self, 'cameras', MappingProxyType(dict(self.cameras)))
@@ -129,12 +130,17 @@ class ActionValidationError(ValueError):
 
 @dataclass(frozen=True)
 class TaskInfo:
-    """Declared placement priors; contains no sampled object pose."""
-    camera_name: str
-    table_height_m: float
-    cube_side_m: float
-    target_center_m: tuple[float, float]
-    target_size_m: tuple[float, float]
+    """Identity of public task priors; concrete tasks define their own fields."""
+    task_id: str
+
+
+@dataclass(frozen=True)
+class TaskContext:
+    """Public per-episode goal and instruction, never evaluator-only state."""
+    task_id: str
+    seed: int
+    language_instruction: str
+    goal: TaskInfo
 
 
 @dataclass(frozen=True)
@@ -152,7 +158,10 @@ class EnvironmentSpec:
 class TaskResult:
     status: str
     elapsed_s: float
-    stable_s: float
+    metrics: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self):
+        object.__setattr__(self, 'metrics', MappingProxyType(dict(self.metrics)))
 
     @property
     def terminated(self) -> bool:
@@ -167,6 +176,14 @@ class StepResult:
     @property
     def done(self) -> bool:
         return self.task_result.terminated
+
+
+class Task(Protocol):
+    info: TaskInfo
+
+    def reset(self, seed: int, state: object, observation: Observation) -> TaskContext: ...
+
+    def update(self, state: object, observation: Observation, actions: ActionChunk) -> TaskResult: ...
 
 
 @dataclass(frozen=True)

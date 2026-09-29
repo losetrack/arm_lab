@@ -29,7 +29,7 @@ def doctor(*, config=None, render_mode='offscreen', steps=2):
         except PackageNotFoundError:
             checks.append({'component': requirement.name, 'ok': False, 'error': 'Not installed'})
     if config is not None and all(check['ok'] for check in checks):
-        from vision_arm_lab.simulation.factory import make_environment
+        from vision_arm_lab.application import make_environment
         from vision_arm_lab.algorithms.policies import HoldPolicy
         try:
             if type(steps) is not int or steps <= 0:

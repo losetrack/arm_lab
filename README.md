@@ -19,9 +19,11 @@ vision-arm-lab/
 │   ├── core/              # 公共契约、动作规范化与通用环境生命周期
 │   ├── simulation/        # 场景配置/XML 解析、资源、仿真后端、控制与组装
 │   ├── algorithms/        # 内置视觉定位和抓放策略
-│   ├── tasks/             # 独立的任务成功/失败判定
+│   ├── tasks/             # 任务定义、公开上下文与成功/失败判定
 │   ├── recording/         # 数据记录、源码指纹与动作回放
 │   ├── cli/               # 命令行适配与安装诊断
+│   ├── configuration.py   # 运行配置拆分与恢复
+│   ├── task_registry.py   # 任务与仿真适配的显式配方
 │   ├── application.py     # 公共 evaluate 入口、算法选择与组件组装
 │   └── evaluation.py      # 单回合/批量执行与评测指标
 ├── configs/               # 场景配置与固定验收种子
@@ -111,7 +113,7 @@ PYTHONPATH=src MUJOCO_GL=egl python -m vision_arm_lab.runner --config configs/mv
 PYTHONPATH=src MUJOCO_GL=egl python -m vision_arm_lab.runner --config configs/mvp.yaml --policy vision --seed-file configs/test_seeds.yaml --record summary
 ```
 
-`summary` 保存有效配置、种子、版本/源码摘要、逐回合结果和汇总。输出路径由终端的 `Records:` 给出，默认在被 Git 忽略的 `runs/` 内。
+`summary` 保存有效配置、种子、版本/源码摘要、逐回合结果和汇总。当前 v2 格式还保存任务标识、任务配置、回合公开上下文和任务指标；v1 回放需使用匹配的旧代码。输出路径由终端的 `Records:` 给出，默认在被 Git 忽略的 `runs/` 内。
 
 动作、原始观测和视频相互独立，必须显式开启：
 
@@ -171,6 +173,8 @@ XML 场景封装后，81 项快速测试和 3 项 MuJoCo 离屏集成测试通�
 本次评估状态、动作记录和场景分层修复后，98 项快速测试和 3 项 MuJoCo 离屏集成测试通过。新增回归覆盖策略异常冒充成功、NumPy/列表动作在不同记录模式下的一致性，以及核心和算法层的导入边界；seed 0 视觉抓放成功，独立 wheel 中的外部策略接入、失败统计和自定义 XML 快照回放通过。本次未重复运行 100 回合成功率测试。
 
 进一步完成配置不可变性、动作记录与相机解耦、指标归属及应用组装分层后，112 项快速测试和 3 项 MuJoCo 离屏集成测试通过。独立 wheel 中的专家定位接入、seed 0 视觉抓放、外部策略 CLI 动作记录和删除源 XML 后的快照回放通过；未重复运行 100 回合成功率测试。
+
+任务独立后，119 项快速测试和 3 项 MuJoCo 离屏集成测试通过。seed 0 专家 663 步、视觉 661 步的逐步动作、机器人状态/RGB 摘要、任务判定和策略阶段与拆分前一致；独立 wheel 的语言上下文、外部策略记录及 v2 任务/场景快照回放通过。当前正式任务仍为 placement，未重跑 100 回合成功率验收。
 
 ```bash
 python -m pytest -q
