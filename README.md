@@ -4,17 +4,20 @@
 
 算法接口、模块边界及 0.2.0 迁移说明见 [API.md](API.md)，自定义算法示例见 [examples/custom_policy.py](examples/custom_policy.py)。历史开发文档保存在本地被 Git 忽略的 `docs/`，不随仓库分发。
 
+场景模型由 [placement.xml](src/vision_arm_lab/simulation/assets/placement.xml) 定义，编辑与自定义加载方式见 [XML 场景说明](SCENE.md)。
+
 ## 项目目录
 
 ```text
 vision-arm-lab/
 ├── README.md              # 安装、运行与验证说明
 ├── API.md                 # 公共接口与算法接入说明
+├── SCENE.md               # XML 场景编辑、加载与参数归属
 ├── pyproject.toml         # Python 包与命令行入口配置
 ├── requirements-lock.txt  # 已验证的依赖版本
 ├── src/vision_arm_lab/    # 环境、算法接口、评测与记录实现
 │   ├── core/              # 公共契约、配置与通用环境生命周期
-│   ├── simulation/        # 仿真场景、后端、控制与环境组装
+│   ├── simulation/        # 仿真后端、控制、组装及 assets/placement.xml 场景源文件
 │   ├── algorithms/        # 内置视觉定位和抓放策略
 │   ├── tasks/             # 独立的任务成功/失败判定
 │   ├── recording/         # 数据记录、源码指纹与动作回放
@@ -160,7 +163,7 @@ PYTHONPATH=src python -m vision_arm_lab.maintenance runs/<run> --delete
 
 2026-09-29 工程化回归：64 项快速测试、2 项 MuJoCo 集成测试通过；原固定种子 1000–1049 下专家和视觉均为 50/50，逐种子的任务结果、控制步数、仿真完成时间与状态机转换记录和原 MVP 一致。干净环境安装、正式 wheel、窗口/离屏诊断、外部算法接入及短回合记录/回放均已检查。
 
-后续按功能整理目录后，69 项快速测试和 2 项 MuJoCo 离屏集成测试通过；公共 API、既有命令入口和 wheel 打包已验证。上述 100 回合成功率来自整理前的工程化回归，本次目录调整未重复运行。
+XML 场景封装后，81 项快速测试和 3 项 MuJoCo 离屏集成测试通过。默认场景的 19 组模型/初始状态/图像数组与封装前完全一致，seed 0 视觉抓放成功；wheel 资源加载及自定义 XML 快照记录/回放均已验证。上述 100 回合成功率来自先前的工程化回归，本次未重复运行。
 
 ```bash
 python -m pytest -q

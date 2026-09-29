@@ -6,12 +6,20 @@ import os
 import platform
 import subprocess
 import shutil
+import xml.etree.ElementTree as ET
+
+from vision_arm_lab.core.scene_xml import resolve_asset_file
+
+
+def scene_asset_fingerprint(xml):
+    return {node.get('file'): sha256(resolve_asset_file(node.get('file')).read_bytes()).hexdigest()
+            for node in ET.fromstring(xml).findall('asset/*[@file]')}
 
 
 def fingerprint():
     package = Path(__file__).resolve().parents[1]
     sources = {str(p.relative_to(package)): sha256(p.read_bytes()).hexdigest()
-               for p in sorted(package.rglob('*.py'))}
+               for p in sorted(package.rglob('*')) if p.suffix in ('.py', '.xml')}
     versions = {d.metadata['Name']: d.version for d in distributions()}
     root = package.parent.parent
     head = None

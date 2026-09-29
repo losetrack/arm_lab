@@ -6,7 +6,7 @@ from time import sleep
 import numpy as np
 from vision_arm_lab.core.config import SceneConfig
 from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec
-from vision_arm_lab.recording.provenance import fingerprint
+from vision_arm_lab.recording.provenance import fingerprint, scene_asset_fingerprint
 from vision_arm_lab.simulation.factory import make_environment
 
 
@@ -33,6 +33,8 @@ def load_episode(directory):
 
 def replay_episode(directory, *, render_mode='offscreen'):
     metadata, recorded, rows = load_episode(directory)
+    if metadata['scene_asset_sha256'] != scene_asset_fingerprint(metadata['scene']['scene_xml']):
+        raise ValueError('Replay requires the recorded scene asset versions')
     with make_environment(SceneConfig(**metadata['scene']), render_mode=render_mode) as environment:
         environment.reset(recorded['seed'])
         for row in rows:

@@ -7,10 +7,12 @@ import numpy as np
 import yaml
 
 from vision_arm_lab.core.contracts import ActionSpec, EnvironmentSpec, TaskInfo
+from vision_arm_lab.core.scene_xml import read_scene_xml, scene_parameters
 
 
 @dataclass(frozen=True)
 class SimulationConfig:
+    scene_xml: str
     table_size_m: list[float]
     table_height_m: float
     friction: list[float]
@@ -98,6 +100,9 @@ class SceneConfig(SimulationConfig):
         for name in ('grasp_quaternion_xyzw', 'camera_quaternion_wxyz'):
             if np.linalg.norm(getattr(self, name)) == 0:
                 raise ValueError(f'{name} must be nonzero')
+        for name, value in scene_parameters(self.scene_xml, self.camera_name).items():
+            if not np.array_equal(np.asarray(getattr(self, name)), np.asarray(value)):
+                raise ValueError(f'{name} must match scene XML; modify XML instead of derived fields')
 
     @property
     def simulation(self) -> SimulationConfig:
@@ -126,10 +131,22 @@ class SceneConfig(SimulationConfig):
 def load_config(path: str | Path | SceneConfig) -> SceneConfig:
     if isinstance(path, SceneConfig):
         return path
-    with Path(path).open() as stream:
+    path = Path(path)
+    with path.open() as stream:
         values = yaml.safe_load(stream)
     if not isinstance(values, dict):
         raise ValueError('Scene configuration must be a YAML mapping')
+    scene_path = values.pop('scene_xml', None)
+    if scene_path is not None and not isinstance(scene_path, str):
+        raise ValueError('scene_xml must be a file path relative to the YAML file')
+    snapshot = read_scene_xml(path.parent / scene_path if scene_path is not None else None)
+    if 'camera_name' not in values:
+        raise ValueError('Scene configuration requires camera_name')
+    parameters = scene_parameters(snapshot, values['camera_name'])
+    duplicates = values.keys() & parameters.keys()
+    if duplicates:
+        raise ValueError(f'Physical parameters belong in scene XML, not YAML: {sorted(duplicates)}')
+    values.update(parameters, scene_xml=snapshot)
     try:
         return SceneConfig(**values)
     except TypeError as exc:

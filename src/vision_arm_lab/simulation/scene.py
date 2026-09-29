@@ -1,14 +1,52 @@
 """Reuse robosuite assets and reset logic for the confirmed placement scene."""
 
 import numpy as np
-from xml.etree.ElementTree import SubElement
+from copy import deepcopy
+import xml.etree.ElementTree as ET
 from robosuite.environments.manipulation.lift import Lift
 from robosuite.environments.manipulation.manipulation_env import ManipulationEnv
-from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BoxObject
+from robosuite.models.base import MujocoXML
+from robosuite.models.objects import MujocoObject
 from robosuite.models.tasks import ManipulationTask
-from robosuite.utils.mjcf_utils import array_to_string, new_site
 from robosuite.utils.placement_samplers import UniformRandomSampler
+
+from vision_arm_lab.core.scene_xml import resolve_asset_file
+
+
+class PlacementArena(MujocoXML):
+    """Adapt an already resolved XML snapshot to robosuite's model merger."""
+    def __init__(self, xml, table_height):
+        self.root = ET.fromstring(xml)
+        self.table_offset = np.array([0.0, 0.0, table_height])
+        for section in ('worldbody', 'asset', 'actuator', 'sensor', 'tendon', 'equality', 'contact'):
+            setattr(self, section, self.create_default_element(section))
+        for node in self.asset.findall('*[@file]'):
+            node.set('file', str(resolve_asset_file(node.get('file'))))
+
+
+class PlacementCube(MujocoObject):
+    """Use the XML body's actual geoms and joints, preserving their names."""
+    def __init__(self, body, side):
+        super().__init__(duplicate_collision_geoms=False)
+        self._name = 'cube'
+        self._obj = body
+        self.side = side
+        self._get_object_properties()
+
+    def exclude_from_prefixing(self, inp):
+        return True  # Scene XML already contains the stable cube_* names.
+
+    @property
+    def bottom_offset(self):
+        return np.array([0.0, 0.0, -self.side / 2])
+
+    @property
+    def top_offset(self):
+        return -self.bottom_offset
+
+    @property
+    def horizontal_radius(self):
+        return self.side / np.sqrt(2)
 
 
 class CubePlacement(Lift):
@@ -27,24 +65,10 @@ class CubePlacement(Lift):
         self.table_offset = np.array([0.0, 0.0, c.table_height_m])
         robot = self.robots[0].robot_model
         robot.set_base_xpos(robot.base_xpos_offset["table"](c.table_size_m[0]))
-        arena = TableArena(c.table_size_m, c.friction, self.table_offset)
-        arena.set_origin([0, 0, 0])
-        camera = arena.worldbody.find(f"camera[@name='{c.camera_name}']")
-        camera.set("pos", array_to_string(c.camera_position_m))
-        quat = np.asarray(c.camera_quaternion_wxyz, dtype=float)
-        camera.set("quat", array_to_string(quat / np.linalg.norm(quat)))
-        camera.set("fovy", str(c.camera_fovy_deg))
-        arena.worldbody.append(new_site(
-            name="target_region", type="box",
-            pos=[*c.target_center_m, c.table_height_m + 0.0005],
-            size=[*(np.asarray(c.target_size_m) / 2), 0.0005],
-            rgba=[0, 1, 0, 0.35],
-        ))
-        self.cube = BoxObject(
-            name="cube", size=[c.cube_side_m / 2] * 3,
-            density=c.cube_mass_kg / c.cube_side_m ** 3,
-            friction=c.friction, rgba=[1, 0, 0, 1], rng=self.rng,
-        )
+        arena = PlacementArena(c.scene_xml, c.table_height_m)
+        cube_body = arena.worldbody.find("body[@name='cube_main']")
+        arena.worldbody.remove(cube_body)
+        self.cube = PlacementCube(cube_body, c.cube_side_m)
         # Bound every possible spawn using the square's circumscribed radius;
         # reject overlapping configurations rather than resampling difficult seeds.
         radius = c.cube_side_m / np.sqrt(2)
@@ -63,8 +87,15 @@ class CubePlacement(Lift):
             reference_pos=self.table_offset, z_offset=c.spawn_clearance_m, rng=self.rng,
         )
         self.model = ManipulationTask(arena, [robot], self.cube)
-        self.model.create_default_element("option").set("timestep", str(1 / c.physics_hz))
-        SubElement(self.model.create_default_element("visual"), "quality", offsamples=str(c.offscreen_samples))
+        # robosuite merges bodies/assets but not global MJCF options. Apply the
+        # scene's explicit global sections after assembling the Panda model.
+        merged = {'worldbody', 'asset', 'actuator', 'sensor', 'tendon', 'equality', 'contact'}
+        for section in arena.root:
+            if section.tag not in merged:
+                existing = self.model.root.find(section.tag)
+                if existing is not None:
+                    self.model.root.remove(existing)
+                self.model.root.append(deepcopy(section))
 
     def reward(self, action=None):
         # Lift's reward/success definition must not leak into placement evaluation.

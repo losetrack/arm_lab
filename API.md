@@ -158,7 +158,7 @@ report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options
 | `cli/` | 参数解析、用户指定模块导入、安装诊断、终端输出与退出码；复用公共 API |
 | 根目录命令模块 | `__main__.py`、`runner.py`、`replay.py`、`maintenance.py` 保留既有命令入口，转交 `cli/` 执行 |
 
-配置入口仍是现有 YAML。内部按 SimulationConfig、PlacementConfig 和公开 TaskInfo 分配配置，避免算法持有完整后端配置。公开导出是稳定调用入口，内部模块构造函数不承诺兼容。
+配置入口仍是 YAML；物理场景参数来自包内 `simulation/assets/placement.xml`，或 YAML 的 `scene_xml` 指定的文件。XML 路径相对 YAML 解析，加载时保存快照并从中提取尺寸、目标区和相机参数；详见 [XML 场景说明](SCENE.md)。内部按 SimulationConfig、PlacementConfig 和公开 TaskInfo 分配配置，避免算法持有完整后端配置。公开导出是稳定调用入口，内部模块构造函数不承诺兼容。
 
 测试按相同功能归档在 `tests/` 的对应子目录。通用环境只通过协议组合后端和任务判定；算法不导入具体仿真模块；具体组装集中在 `simulation/factory.py`。CLI 和评测层协调这些能力，不把终端参数解析放入算法或环境。
 

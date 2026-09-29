@@ -1,0 +1,67 @@
+<!-- Editable placement scene; Panda is assembled by the robosuite backend.
+     MJCF size values are HALF extents. Keep task-bound names unchanged.
+     Relative asset files resolve beside this XML; robosuite:// resolves from
+     the installed robosuite models/assets directory. See ROBOSUITE_LICENSE.txt. -->
+<mujoco model="panda_placement_scene">
+  <asset>
+    <texture builtin="gradient" height="256" rgb1=".9 .9 1." rgb2=".2 .3 .4" type="skybox" width="256" />
+    <texture file="robosuite://textures/light-gray-floor-tile.png" type="2d" name="texplane" />
+    <material name="floorplane" reflectance="0.01" shininess="0.0" specular="0.0" texrepeat="2 2" texture="texplane" texuniform="true" />
+    <texture file="robosuite://textures/ceramic.png" type="cube" name="tex-ceramic" />
+    <material name="table_ceramic" reflectance="0.0" shininess="0.0" specular="0.2" texrepeat="1 1" texture="tex-ceramic" />
+    <texture file="robosuite://textures/steel-brushed.png" type="cube" name="tex-steel-brushed" />
+    <material name="table_legs_metal" reflectance="0.8" shininess="0.8" texrepeat="1 1" texture="tex-steel-brushed" />
+    <texture file="robosuite://textures/light-gray-plaster.png" type="2d" name="tex-light-gray-plaster" />
+    <material name="walls_mat" reflectance="0.0" shininess="0.1" specular="0.1" texrepeat="3 3" texture="tex-light-gray-plaster" texuniform="true" />
+    <texture name="textable" builtin="flat" height="512" width="512" rgb1="0.5 0.5 0.5" rgb2="0.5 0.5 0.5" />
+    <material name="table_mat" texture="textable" />
+  </asset>
+  <worldbody>
+    <geom condim="3" group="1" material="floorplane" name="floor" pos="0.0 0.0 0.0" size="3 3 .125" type="plane" />
+    <geom pos="-1.25 2.25 1.5" quat="0.6532815 0.6532815 0.2705981 0.2705981" size="1.06 1.5 0.01" type="box" conaffinity="0" contype="0" group="1" name="wall_leftcorner_visual" material="walls_mat" />
+    <geom pos="-1.25 -2.25 1.5" quat="0.6532815 0.6532815 -0.2705981 -0.2705981" size="1.06 1.5 0.01" type="box" conaffinity="0" contype="0" group="1" name="wall_rightcorner_visual" material="walls_mat" />
+    <geom pos="1.25 3.0 1.5" quat="0.7071 0.7071 0 0" size="1.75 1.5 0.01" type="box" conaffinity="0" contype="0" group="1" name="wall_left_visual" material="walls_mat" />
+    <geom pos="1.25 -3.0 1.5" quat="0.7071 -0.7071 0 0" size="1.75 1.5 0.01" type="box" conaffinity="0" contype="0" group="1" name="wall_right_visual" material="walls_mat" />
+    <geom pos="-2.0 0.0 1.5" quat="0.5 0.5 0.5 0.5" size="1.5 1.5 0.01" type="box" conaffinity="0" contype="0" group="1" name="wall_rear_visual" material="walls_mat" />
+    <geom pos="3.0 0.0 1.5" quat="0.5 0.5 -0.5 -0.5" size="3 1.5 0.01" type="box" conaffinity="0" contype="0" group="1" name="wall_front_visual" material="walls_mat" />
+    <!-- Table collision and visual dimensions must be edited together. -->
+    <body name="table" pos="0.0 0.0 0.775">
+      <geom pos="0 0 0" size="0.4 0.4 0.025" type="box" group="0" name="table_collision" friction="1.0 0.005 0.0001" rgba="0.5 0.5 0 1" />
+      <geom pos="0 0 0" size="0.4 0.4 0.025" type="box" conaffinity="0" contype="0" group="1" name="table_visual" material="table_ceramic" />
+      <site pos="0.0 0.0 0.025" name="table_top" size="0.001 0.001 0.001" rgba="0 0 0 0" />
+      <geom pos="0.30000000000000004 0.30000000000000004 -0.3875" size="0.025 0.3875" type="cylinder" conaffinity="0" contype="0" group="1" name="table_leg1_visual" material="table_legs_metal" />
+      <geom pos="-0.30000000000000004 0.30000000000000004 -0.3875" size="0.025 0.3875" type="cylinder" conaffinity="0" contype="0" group="1" name="table_leg2_visual" material="table_legs_metal" />
+      <geom pos="-0.30000000000000004 -0.30000000000000004 -0.3875" size="0.025 0.3875" type="cylinder" conaffinity="0" contype="0" group="1" name="table_leg3_visual" material="table_legs_metal" />
+      <geom pos="0.30000000000000004 -0.30000000000000004 -0.3875" size="0.025 0.3875" type="cylinder" conaffinity="0" contype="0" group="1" name="table_leg4_visual" material="table_legs_metal" />
+    </body>
+    <light pos="1.0 1.0 1.5" dir="-0.2 -0.2 -1" specular="0.3 0.3 0.3" directional="true" castshadow="false" />
+    <camera mode="fixed" name="frontview" pos="1.6 0.0 1.45" quat="0.56 0.43 0.43 0.56" />
+    <camera mode="fixed" name="birdview" pos="-0.2 0.0 3.0" quat="0.7071 0 0 0.7071" />
+    <!-- Camera selected by camera_name in the runtime YAML. -->
+    <camera mode="fixed" name="agentview" pos="0.5 0.0 1.35" quat="0.6530979720442611 0.2710406591485372 0.2710406591485372 0.6530979720442611" fovy="45.0" />
+    <camera mode="fixed" name="sideview" pos="-0.05651774593317116 1.2761224129427358 1.4879572214102434" quat="0.009905065491771751 0.006877963156909582 0.5912228352893879 0.806418094001364" />
+    <body mocap="true" pos="0.0 0.0 -1.0" name="left_eef_target">
+      <geom rgba="0.898 0.420 0.435 0.5" conaffinity="0" contype="0" type="box" size="0.05 0.05 0.05" pos="0 0 0" group="2" name="left_eef_target_box" />
+      <geom rgba="0.898 0.420 0.435 0.8" conaffinity="0" contype="0" type="sphere" size="0.01" pos="0 0 0" group="2" name="left_eef_target_sphere" />
+    </body>
+    <body mocap="true" pos="0.0 0.0 -1.0" name="right_eef_target">
+      <geom rgba="0.208 0.314 0.439 0.5" conaffinity="0" contype="0" type="box" size="0.05 0.05 0.05" pos="0 0 0" group="2" name="right_eef_target_box" />
+      <geom rgba="0.208 0.314 0.439 0.8" conaffinity="0" contype="0" type="sphere" size="0.01" pos="0 0 0" group="2" name="right_eef_target_sphere" />
+    </body>
+    <!-- Placement target: visual site only, never a collision obstacle. -->
+    <site type="box" pos="0.1 0.15 0.8005" size="0.06 0.06 0.0005" rgba="0 1 0 0.35" name="target_region" />
+    <!-- The task samples cube pose on reset; this body pos is not a spawn setting.
+         Edit both geom sizes; collision mass/density defines physical mass. -->
+    <body pos="0 0 0" name="cube_main">
+      <geom rgba="0.5 0 0 1" density="1562.4999999999998" friction="1.0 0.005 0.0001" solref="0.02 1.0" solimp="0.9 0.95 0.001" type="box" size="0.02 0.02 0.02" pos="0 0 0" group="0" name="cube_g0" />
+      <geom conaffinity="0" contype="0" mass="1e-8" rgba="1 0 0 1" type="box" size="0.02 0.02 0.02" pos="0 0 0" group="1" name="cube_g0_vis" />
+      <joint type="free" name="cube_joint0" />
+      <site type="sphere" group="0" pos="0 0 0" size="0.002 0.002 0.002" rgba="1 0 0 1" name="cube_default_site" />
+    </body>
+  </worldbody>
+  <option impratio="20" cone="elliptic" density="1.2" viscosity="0.00002" timestep="0.002" />
+  <visual>
+    <map znear="0.001" />
+    <quality offsamples="0" />
+  </visual>
+</mujoco>

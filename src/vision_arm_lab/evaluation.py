@@ -145,11 +145,12 @@ def evaluate(config, *, seeds, policy=None, policy_factory=None, locator_factory
         validate_policy(algorithm, environment.spec)
         metadata = {}
         if options.mode != 'off':
-            from vision_arm_lab.recording.provenance import fingerprint
+            from vision_arm_lab.recording.provenance import fingerprint, scene_asset_fingerprint
             from vision_arm_lab.algorithms.policies import GraspConfig
             from vision_arm_lab.algorithms.perception import VisionConfig
             metadata = {
                 **fingerprint(), 'scene': asdict(config),
+                'scene_asset_sha256': scene_asset_fingerprint(config.scene_xml),
                 'action_spec': asdict(environment.spec.action_spec),
                 'seeds': seeds, 'policy': mode, 'record_options': asdict(options),
                 'policy_metadata': policy_metadata or {},
