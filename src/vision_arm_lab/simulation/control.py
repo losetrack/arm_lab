@@ -22,11 +22,8 @@ class PandaActionAdapter:
         action = chunk.actions[0]
         if not isinstance(action, Action):
             raise ActionValidationError('ActionChunk must contain Action values')
-        try:
-            delta = np.asarray(action.delta_position_m, dtype=float)
-            rotation = np.asarray(action.delta_rotation_rad, dtype=float)
-        except (TypeError, ValueError) as exc:
-            raise ActionValidationError('Action components must be numeric') from exc
+        delta = action.delta_position_m
+        rotation = action.delta_rotation_rad
         if delta.shape != (3,) or not np.isfinite(delta).all():
             raise ActionValidationError("Translation must contain three finite values")
         if np.any(np.abs(delta) > self.spec.max_translation_per_axis_m):

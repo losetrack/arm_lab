@@ -69,6 +69,8 @@ T03 动作保持不变：
 - 每个 ActionChunk 恰有一个 Action，规格必须与 `env.spec.action_spec` 相同；控制周期 0.05 秒。
 - 越界、非有限值、错误形状和不支持的规格明确报错，不自动裁剪。
 
+`Action` 创建时将列表或 NumPy 向量复制为只读浮点数组，将 Python/NumPy 整数夹爪值统一为 Python `int`；浮点夹爪值不会被截断成整数。控制、回调与记录使用同一份动作数据。数值类型错误在动作构造时报告，物理范围和规格仍在 step 前校验。
+
 ## 接入完整策略
 
 实现三个成员：`action_spec`、`required_inputs`、`reset()/act(observation)`。最小示例见 [custom_policy.py](examples/custom_policy.py)；无需继承项目基类，也不需要 `phase` 或 `events`。
@@ -89,7 +91,7 @@ print(report.summary)
 
 `required_inputs` 是传感器名称的 frozenset，可使用 `rgb`、`depth`、`calibration`、`robot_state`。构造时读取 TaskInfo 所需先验；不要在这个集合里混入内部定位模块或不受支持的真值字段。
 
-预期算法失败可以 `raise PolicyFailure("localization_failed")`，消息用作结果标签。意外算法异常记录为 `policy_error`；后端异常为 `environment_error`；中断为 `interrupted`。不会替换失败种子或自动重试。
+预期算法失败可以 `raise PolicyFailure("localization_failed")`，回合 `status` 固定为 `policy_failure`，消息写入 `failure_reason`，不会被解释为任务状态。意外算法异常记录为 `policy_error`；后端异常为 `environment_error`；中断为 `interrupted`。不会替换失败种子或自动重试。
 
 可选实现 `diagnostics() -> Mapping` 返回 JSON 可序列化诊断。通用运行器不依赖诊断内容；内置抓放策略在这里报告状态机阶段。命令行 `--verbose` 在诊断变化时输出。
 
@@ -125,11 +127,13 @@ PYTHONPATH=examples MUJOCO_GL=egl vision-arm evaluate \
 
 `evaluate` 返回 EvaluationReport：
 
-- `episodes`：逐回合字典，包含种子、状态、实际执行步数、仿真/墙钟时间、信息来源、算法诊断和环境诊断；意外异常含阶段、类型和消息。
+- `episodes`：逐回合字典，包含种子、执行状态 `status`、任务状态 `task_status`、实际执行步数、仿真/墙钟时间、信息来源、算法诊断和环境诊断；预期算法失败含 `failure_reason`，意外异常含阶段、类型和消息。
 - `summary`：已尝试回合数、成功数/率、成功平均仿真时间、结果分类、记录模式、警告与预算。
 - `records`：开启记录时的输出目录；off 为 None。
 
 任务成功规则沿用 MVP。达到运行器 `steps` 上限时，普通算法返回 step_limit；inspect 返回 running。任务超时与步数上限不是成功。Python API 返回失败结果供调用者处理，不退出进程；CLI 遇算法/环境错误返回 1，配置/启动错误返回 2，中断返回 130，已完成的任务成败统计通常返回 0。
+
+`task_status` 来自任务评估器的最后一次结果；reset 成功后为 running，reset 失败时为 None。成功只来自任务评估器，`PolicyFailure("success")` 也会记录为算法失败，不能提高成功率。原先按 `status == "localization_failed"` 等失败原因筛选的代码，需改为检查 `status == "policy_failure"` 和 `failure_reason`。
 
 默认 off 不创建实验文件。需要完整记录选项时传 `RecordOptions`：
 

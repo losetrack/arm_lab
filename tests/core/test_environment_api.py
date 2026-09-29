@@ -1,5 +1,6 @@
 """Public boundaries and lifecycle, tested without constructing a simulator."""
 from dataclasses import replace
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -9,7 +10,7 @@ import pytest
 
 from vision_arm_lab import (
     Action, ActionChunk, CameraObservation, Environment, Observation, RobotState,
-    evaluate, run_episode,
+    PolicyFailure, RecordOptions, evaluate, run_episode,
 )
 from vision_arm_lab.core.config import load_config
 from vision_arm_lab.simulation.control import PandaActionAdapter
@@ -210,3 +211,73 @@ def test_callback_failure_is_visible_and_closes_environment(monkeypatch):
 def test_config_validation_precedes_simulation(changes):
     with pytest.raises(ValueError):
         replace(load_config(CONFIG), **changes)
+
+
+@pytest.mark.parametrize('reason', ['success', 'timeout', 'environment_error', 'localization_failed'])
+def test_policy_failure_cannot_set_task_or_execution_status(reason, monkeypatch):
+    environment, _ = fixture_environment()
+    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    class FailedPolicy(HoldPolicy):
+        def act(self, observation):
+            raise PolicyFailure(reason)
+    report = evaluate(CONFIG, seeds=[0, 1], policy_factory=FailedPolicy, steps=2)
+    assert report.summary['successes'] == 0
+    assert report.summary['success_rate'] == 0
+    assert report.summary['outcomes'] == {'policy_failure': 2}
+    for result in report.episodes:
+        assert result['status'] == 'policy_failure'
+        assert result['task_status'] == 'running'
+        assert result['failure_reason'] == reason
+        assert result['steps'] == 0
+
+
+@pytest.mark.parametrize('mode', ['off', 'summary', 'debug'])
+@pytest.mark.parametrize('use_list', [False, True])
+def test_numpy_actions_have_identical_behavior_with_recording(mode, use_list, tmp_path, monkeypatch):
+    environment, _ = fixture_environment()
+    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    class NumpyPolicy(HoldPolicy):
+        def act(self, observation):
+            delta = [0, 0, 0] if use_list else np.zeros(3, dtype=np.float32)
+            return ActionChunk((Action(delta, np.zeros(3, dtype=np.float32), np.int64(-1)),), self.action_spec)
+    report = evaluate(CONFIG, seeds=[0, 1], policy_factory=NumpyPolicy, steps=2,
+                      record=RecordOptions(mode=mode, output=str(tmp_path), actions=mode == 'debug'))
+    assert [r['status'] for r in report.episodes] == ['step_limit', 'step_limit']
+    assert [r['steps'] for r in report.episodes] == [2, 2]
+    if mode == 'debug':
+        for episode in sorted(report.records.glob('episode_*')):
+            rows = [json.loads(line) for line in (episode / 'actions.jsonl').read_text().splitlines()]
+            assert len(rows) == 2
+            assert rows[0]['delta_position_m'] == [0, 0, 0]
+            assert rows[0]['gripper'] == -1 and type(rows[0]['gripper']) is int
+        assert all(r['recording']['actions_complete'] for r in report.episodes)
+
+
+@pytest.mark.parametrize('gripper', [0.5, np.nan, 'close'])
+def test_invalid_gripper_is_rejected_before_physics(gripper):
+    environment, backend = fixture_environment()
+    class BadPolicy(HoldPolicy):
+        def act(self, observation):
+            return ActionChunk((Action(np.zeros(3), np.zeros(3), gripper),), self.action_spec)
+    result = run_episode(environment, BadPolicy(environment.spec), 0, 2)
+    assert result['status'] == 'policy_error'
+    assert result['steps'] == 0 and backend.time == 0
+
+
+def test_action_normalization_owns_the_recorded_values():
+    delta = np.zeros(3, dtype=np.float32)
+    action = Action(delta, [0, 0, 0], np.int64(-1))
+    delta[0] = 0.005
+    assert not action.delta_position_m.any()
+    assert type(action.gripper) is int
+    with pytest.raises(ValueError):
+        action.delta_position_m[0] = 1
+
+
+def test_real_task_success_is_counted(monkeypatch):
+    environment, _ = fixture_environment()
+    monkeypatch.setattr('vision_arm_lab.evaluation.make_environment', lambda *a, **kw: environment)
+    report = evaluate(CONFIG, seeds=[0], policy_factory=HoldPolicy, steps=22)
+    assert report.summary['success_rate'] == 1
+    assert report.episodes[0]['task_status'] == 'success'
+    assert 'failure_reason' not in report.episodes[0]

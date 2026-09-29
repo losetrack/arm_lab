@@ -1,6 +1,7 @@
 """Simulator-independent T03 contracts. All physical values use SI units."""
 
 from dataclasses import dataclass
+from operator import index
 from types import MappingProxyType
 from typing import Mapping, Protocol, runtime_checkable
 
@@ -87,11 +88,26 @@ class Action:
     delta_rotation_rad: NDArray[np.floating]
     gripper: int
 
+    def __post_init__(self):
+        # Control, callbacks and recording consume the same owned numeric data.
+        # Physical limits are still checked by the action adapter before step.
+        try:
+            for name in ('delta_position_m', 'delta_rotation_rad'):
+                value = np.array(getattr(self, name), dtype=float, copy=True)
+                value.setflags(write=False)
+                object.__setattr__(self, name, value)
+            object.__setattr__(self, 'gripper', index(self.gripper))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ActionValidationError('Action requires numeric vectors and an integer gripper') from exc
+
 
 @dataclass(frozen=True)
 class ActionChunk:
     actions: tuple[Action, ...]
     spec: ActionSpec
+
+    def __post_init__(self):
+        object.__setattr__(self, 'actions', tuple(self.actions))
 
 
 class Policy(Protocol):
@@ -104,7 +120,7 @@ class Policy(Protocol):
 
 
 class PolicyFailure(RuntimeError):
-    """An expected algorithm failure whose message is an outcome label."""
+    """Expected algorithm failure; its message is a reason, never a task status."""
 
 
 class ActionValidationError(ValueError):

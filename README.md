@@ -138,6 +138,8 @@ PYTHONPATH=src MUJOCO_GL=egl python -m vision_arm_lab.runner --config configs/mv
 
 后端/环境错误计入 `environment_error`，意外算法错误计入 `policy_error`，不补抽种子；命令存在这些错误时返回 1，配置/启动错误返回 2，中断返回 130。成功率分母包含所有已执行的尝试。
 
+预期算法失败统一计入 `policy_failure`，具体原因保存在 `failure_reason`；`task_status` 单独保存任务状态，算法异常消息不会被当作成功结果。动作中的 NumPy 整数和数值向量在入口统一规范化，开启动作记录不会改变其执行语义。
+
 ## 回放与临时文件
 
 只有 `result.json` 中 `recording.actions_complete=true` 的回合可重放，且需匹配源码和依赖版本：

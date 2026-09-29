@@ -53,11 +53,14 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
     executed = 0
     phase = 'reset'
     status = 'running'
+    task_status = None
+    failure_reason = None
     error = None
     diagnostic = {}
     previous_diagnostic = None
     try:
         observation = environment.reset(seed)
+        task_status = 'running'
         phase = 'policy'
         validate_inputs(policy, observation)
         policy.reset()
@@ -75,6 +78,7 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
             before, observation = observation, step.observation
             executed = index
             status = step.task_result.status
+            task_status = step.task_result.status
             if on_transition is not None:
                 phase = 'callback'
                 on_transition(Transition(index, before, actions, observation, step.task_result))
@@ -91,7 +95,8 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
     except PolicyFailure as exc:
         if phase != 'policy':
             raise
-        status = str(exc)
+        status = 'policy_failure'
+        failure_reason = str(exc)
     except Exception as exc:
         if phase == 'callback':
             raise
@@ -99,6 +104,7 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
         error = {'stage': phase, 'type': type(exc).__name__, 'message': str(exc)}
     result = {
         'seed': seed, 'mode': mode, 'status': status, 'steps': executed,
+        'task_status': task_status,
         'sim_time_s': observation.timestamp_s if observation is not None else None,
         'wall_time_s': monotonic() - start,
         'observation_source': 'object ground truth and robot sensors' if mode == 'expert' else 'public sensors and declared task priors',
@@ -106,6 +112,8 @@ def run_episode(environment, policy, seed, steps, *, mode='custom',
     }
     if error is not None:
         result['error'] = error
+    if failure_reason is not None:
+        result['failure_reason'] = failure_reason
     return result
 
 
