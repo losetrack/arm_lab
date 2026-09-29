@@ -1,8 +1,12 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from vision_arm_lab.core.config import load_config
+from vision_arm_lab.core.contracts import TaskInfo
 from vision_arm_lab.algorithms.policies import GraspPolicy, PolicyFailure
+
+
+def task():
+    return TaskInfo('agentview', 0.8, 0.04, (0.1, 0.15), (0.12, 0.12))
 
 
 def observation(time, position=(0, 0, 1), gap=0.08):
@@ -17,7 +21,7 @@ def test_localization_runs_once_and_motion_is_bounded():
     def locate(obs):
         calls.append(obs)
         return np.array([0.1, -0.1, 0.82])
-    policy = GraspPolicy(load_config('configs/mvp.yaml'), locate)
+    policy = GraspPolicy(task(), locate)
     policy.act(observation(1))
     assert policy.phase == 'approach' and len(calls) == 1
     action = policy.act(observation(1.05)).actions[0]
@@ -30,7 +34,7 @@ def test_localization_runs_once_and_motion_is_bounded():
 
 
 def test_empty_grasp_and_wait_terminate():
-    policy = GraspPolicy(load_config('configs/mvp.yaml'), lambda obs: [0, 0, 0.82])
+    policy = GraspPolicy(task(), lambda obs: [0, 0, 0.82])
     policy.phase = 'close'
     with pytest.raises(PolicyFailure, match='grasp_failed'):
         policy.act(observation(1.1, gap=0.001))
@@ -40,7 +44,7 @@ def test_empty_grasp_and_wait_terminate():
 
 
 def test_release_does_not_advance_until_gripper_opens():
-    policy = GraspPolicy(load_config('configs/mvp.yaml'), lambda obs: [0, 0, 0.82])
+    policy = GraspPolicy(task(), lambda obs: [0, 0, 0.82])
     policy.phase = 'release'
     policy.act(observation(0.6, gap=0.04))
     assert policy.phase == 'release'

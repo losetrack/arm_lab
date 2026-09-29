@@ -4,7 +4,7 @@ from pathlib import Path
 from time import monotonic, sleep
 from typing import Callable
 
-from vision_arm_lab.core.config import load_config
+from vision_arm_lab.simulation.config import load_config
 from vision_arm_lab.core.contracts import (
     ActionValidationError, PolicyDiagnostics, PolicyFailure, Transition,
 )
@@ -153,12 +153,11 @@ def evaluate(config, *, seeds, policy=None, policy_factory=None, locator_factory
         validate_policy(algorithm, environment.spec)
         metadata = {}
         if options.mode != 'off':
-            from vision_arm_lab.recording.provenance import fingerprint, scene_asset_fingerprint
+            from vision_arm_lab.recording.provenance import fingerprint
             from vision_arm_lab.algorithms.policies import GraspConfig
             from vision_arm_lab.algorithms.perception import VisionConfig
             metadata = {
-                **fingerprint(), 'scene': asdict(config),
-                'scene_asset_sha256': scene_asset_fingerprint(config.scene_xml),
+                **fingerprint(), **config.record_metadata(),
                 'action_spec': asdict(environment.spec.action_spec),
                 'seeds': seeds, 'policy': mode, 'record_options': asdict(options),
                 'policy_metadata': policy_metadata or {},
@@ -173,7 +172,7 @@ def evaluate(config, *, seeds, policy=None, policy_factory=None, locator_factory
                 recorder.begin_episode(index, seed, mode)
                 result = run_episode(
                     environment, algorithm, seed,
-                    steps if steps is not None else round(config.episode_timeout_s * config.control_hz),
+                    steps if steps is not None else round(environment.spec.episode_timeout_s / environment.spec.action_spec.interval_s),
                     mode=mode, on_transition=recorder.record_transition,
                     on_diagnostic=on_diagnostic,
                 )

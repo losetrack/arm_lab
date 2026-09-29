@@ -1,13 +1,14 @@
 """Explicit configuration for the confirmed single-scene MVP."""
 
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 import numpy as np
 import yaml
 
 from vision_arm_lab.core.contracts import ActionSpec, EnvironmentSpec, TaskInfo
-from vision_arm_lab.core.scene_xml import read_scene_xml, scene_parameters
+from vision_arm_lab.simulation.scene_xml import read_scene_xml, scene_parameters, scene_asset_fingerprint
+from vision_arm_lab.tasks.placement import PlacementConfig
 
 
 @dataclass(frozen=True)
@@ -35,19 +36,6 @@ class SimulationConfig:
     control_hz: int
     physics_hz: int
     offscreen_samples: int
-
-
-@dataclass(frozen=True)
-class PlacementConfig:
-    cube_side_m: float
-    table_height_m: float
-    target_center_m: tuple[float, float]
-    target_size_m: tuple[float, float]
-    bottom_tolerance_m: float
-    linear_speed_limit_m_s: float
-    angular_speed_limit_rad_s: float
-    stable_duration_s: float
-    episode_timeout_s: float
 
 
 @dataclass(frozen=True)
@@ -103,6 +91,11 @@ class SceneConfig(SimulationConfig):
         for name, value in scene_parameters(self.scene_xml, self.camera_name).items():
             if not np.array_equal(np.asarray(getattr(self, name)), np.asarray(value)):
                 raise ValueError(f'{name} must match scene XML; modify XML instead of derived fields')
+
+    def record_metadata(self):
+        """Capture the scene and its resources without exposing XML to consumers."""
+        return {'scene': asdict(self),
+                'scene_asset_sha256': scene_asset_fingerprint(self.scene_xml)}
 
     @property
     def simulation(self) -> SimulationConfig:

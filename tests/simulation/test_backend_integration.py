@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from vision_arm_lab.core.config import load_config
+from vision_arm_lab.simulation.config import load_config
 from vision_arm_lab.core.contracts import Action, ActionChunk
 
 pytestmark = pytest.mark.integration

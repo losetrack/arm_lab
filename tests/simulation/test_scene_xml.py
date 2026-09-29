@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 import pytest
 import yaml
 
-from vision_arm_lab.core.config import SceneConfig, load_config
+from vision_arm_lab.simulation.config import SceneConfig, load_config
 
 
 def test_relative_xml_and_derived_task_priors(custom_scene, monkeypatch):

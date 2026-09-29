@@ -10,7 +10,7 @@ from robosuite.models.objects import MujocoObject
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.placement_samplers import UniformRandomSampler
 
-from vision_arm_lab.core.scene_xml import resolve_asset_file
+from vision_arm_lab.simulation.scene_xml import resolve_asset_file
 
 
 class PlacementArena(MujocoXML):

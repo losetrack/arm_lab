@@ -12,7 +12,7 @@ from vision_arm_lab import (
     Action, ActionChunk, CameraObservation, Environment, Observation, RobotState,
     PolicyFailure, RecordOptions, evaluate, run_episode,
 )
-from vision_arm_lab.core.config import load_config
+from vision_arm_lab.simulation.config import load_config
 from vision_arm_lab.simulation.control import PandaActionAdapter
 from vision_arm_lab.algorithms.policies import HoldPolicy
 from vision_arm_lab.tasks.placement import ObjectState, PlacementEvaluator

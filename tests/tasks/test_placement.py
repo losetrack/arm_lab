@@ -4,8 +4,7 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from vision_arm_lab.core.config import load_config
-from vision_arm_lab.tasks.placement import ObjectState, PlacementEvaluator
+from vision_arm_lab.tasks.placement import ObjectState, PlacementConfig, PlacementEvaluator
 
 
 def state(**changes):
@@ -17,7 +16,12 @@ def state(**changes):
 
 @pytest.fixture
 def evaluator():
-    return PlacementEvaluator(load_config("configs/mvp.yaml"))
+    return PlacementEvaluator(PlacementConfig(
+        cube_side_m=0.04, table_height_m=0.8,
+        target_center_m=(0.1, 0.15), target_size_m=(0.12, 0.12),
+        bottom_tolerance_m=0.003, linear_speed_limit_m_s=0.01,
+        angular_speed_limit_rad_s=0.1, stable_duration_s=1.0, episode_timeout_s=60.0,
+    ))
 
 
 def test_success_requires_full_second_and_latches(evaluator):

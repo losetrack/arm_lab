@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import pytest
 import yaml
 
-from vision_arm_lab.core.scene_xml import read_scene_xml
+from vision_arm_lab.simulation.scene_xml import read_scene_xml
 
 
 @pytest.fixture

@@ -5,6 +5,7 @@ import pytest
 
 from vision_arm_lab.recording import provenance, replay
 from vision_arm_lab.recording.replay import load_episode
+from vision_arm_lab.simulation.scene_xml import scene_asset_fingerprint
 
 
 @pytest.mark.parametrize('changed_file', ['algorithm', 'xml'])
@@ -47,7 +48,7 @@ def test_replay_rejects_modified_external_scene_asset(tmp_path, monkeypatch):
     asset.write_bytes(b'original texture')
     xml = f'<mujoco><asset><texture file="{asset}"/></asset></mujoco>'
     metadata = {'scene': {'scene_xml': xml},
-                'scene_asset_sha256': provenance.scene_asset_fingerprint(xml)}
+                'scene_asset_sha256': scene_asset_fingerprint(xml)}
     monkeypatch.setattr(replay, 'load_episode', lambda directory: (metadata, {}, []))
     asset.write_bytes(b'edited texture')
     with pytest.raises(ValueError, match='scene asset versions'):

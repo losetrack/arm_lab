@@ -42,6 +42,17 @@ MUJOCO_GL=egl vision-arm inspect --config configs/my_scene.yaml --seed 0 --steps
 
 Python API 的配置路径同样改为 `configs/my_scene.yaml`。读取配置时会保存 XML 快照；修改源文件后需重新创建环境，已有环境的 `reset()` 继续使用原快照。
 
+配置读取与 XML 解析分别位于 `simulation/config.py`、`simulation/scene_xml.py`，资源解析和场景恢复也由仿真层负责。核心层只管理环境生命周期和公共数据，算法只接收公开观测及 TaskInfo 先验。
+
+## 场景创建流程
+
+1. API/CLI 调用 `simulation.factory.make_environment()`，仿真层读取 YAML、解析 XML 与资源路径，并生成场景快照和公开的 `EnvironmentSpec`。
+2. 仿真层工厂组装后端、动作适配器及任务评估器，将这些对象注入核心层的 `Environment`。此时尚未创建物理环境。
+3. 用户调用 `Environment.reset(seed)`，核心层通过后端接口委托 `RobosuiteBackend` 创建 `CubePlacement`、Panda 和控制器；场景对象与模型资源均留在仿真层。
+4. 算法只使用公开的规格、观测和动作接口。桌面高度、方块尺寸及目标区等通过 `TaskInfo` 提供，无须读取 YAML、XML 或接触场景对象。
+
+记录时由仿真配置提供场景快照与资源指纹；回放调用 `simulation.factory.make_recorded_environment()`，由仿真层校验资源并恢复场景，记录层不解释 XML 或组装场景。
+
 ## 参数归属
 
 | 内容 | 修改位置 |

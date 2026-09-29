@@ -153,10 +153,10 @@ report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options
 
 | 模块 | 职责 |
 | --- | --- |
-| `core/` | `contracts.py` 定义公共数据、单位和时序；`config.py` 加载配置；`environment.py` 管理通用生命周期，不依赖具体仿真器 |
-| `simulation/` | `robosuite.py`、`scene.py`、`control.py` 负责物理、场景、传感器与控制；`placement_state.py` 读取任务私有真值；`factory.py` 组装具体环境与内置策略 |
+| `core/` | `contracts.py` 定义公共数据、动作规范化、单位和时序；`environment.py` 管理通用生命周期，不解析 YAML/XML 或导入仿真模块 |
+| `simulation/` | `config.py` 加载 YAML 并生成配置和公开规格；`scene_xml.py` 解析 XML、定位资源和生成资源指纹；`factory.py` 组装环境及恢复记录中的场景；`scene.py`、`robosuite.py`、`control.py` 实现场景、物理、传感器与控制；`placement_state.py` 读取私有真值 |
 | `algorithms/` | `perception.py` 实现颜色定位；`policies.py` 实现保持与抓放策略，通过公共观测和动作契约工作 |
-| `tasks/` | `placement.py` 实现纯任务判定，不直接访问仿真器 |
+| `tasks/` | `placement.py` 定义 PlacementConfig 并实现纯任务判定，不直接访问仿真器 |
 | `evaluation.py` | 通用回合循环、策略注入、批量结果与记录协调 |
 | `recording/` | `recorder.py` 消费 Transition、管理文件预算；`provenance.py` 生成版本指纹；`replay.py` 校验并重放完整动作记录 |
 | `cli/` | 参数解析、用户指定模块导入、安装诊断、终端输出与退出码；复用公共 API |
@@ -166,12 +166,14 @@ report = evaluate("configs/mvp.yaml", policy="vision", seeds=[0], record=options
 
 测试按相同功能归档在 `tests/` 的对应子目录。通用环境只通过协议组合后端和任务判定；算法不导入具体仿真模块；具体组装集中在 `simulation/factory.py`。CLI 和评测层协调这些能力，不把终端参数解析放入算法或环境。
 
-目录整理后，内部导入路径随功能迁移，例如 `vision_arm_lab.perception` 改为 `vision_arm_lab.algorithms.perception`、`vision_arm_lab.config` 改为 `vision_arm_lab.core.config`。仓库内示例已同步；外部代码若直接导入旧内部模块，需更新路径。顶层公共导出和现有命令参数保持不变。
+场景记录由 `SceneConfig.record_metadata()` 生成，回放通过 `simulation.factory.make_recorded_environment()` 恢复。评测和记录模块不自行解析 XML、定位资源或解释场景几何；算法只接收公开 TaskInfo，不持有 SceneConfig。
+
+目录整理后，内部导入路径随功能迁移，例如 `vision_arm_lab.perception` 改为 `vision_arm_lab.algorithms.perception`。场景配置与 XML 解析进一步从 `core.config`、`core.scene_xml` 移到 `simulation.config`、`simulation.scene_xml`。外部代码若直接导入旧内部模块，需更新路径。顶层公共导出和现有命令参数保持不变。
 
 从 MVP 迁移需要注意：
 
 - 原 `python -m vision_arm_lab.runner` 命令保留，内部转到公共 evaluate；其默认策略仍为 inspect。新 `vision-arm evaluate` 默认 vision。
 - 原直接构造 RobosuiteBackend 的调用改用 `make_environment`；`step` 返回 StepResult，使用 `.observation/.task_result/.done`。
-- `final_phase/phases` 移入结果的 `policy_diagnostics`；GL 信息在 `environment.gl_renderer`；新算法错误单独标记 policy_error。
+- `final_phase/phases` 移入结果的 `policy_diagnostics`；GL 信息在 `env.diagnostics['gl_renderer']`；新算法错误单独标记 policy_error。
 - 观测数组变为只读，修改前先复制。
 - 回放复用公共环境工厂。源码指纹现在以包内相对路径计算，正式安装包也可记录；旧版本记录按原有严格匹配规则被拒绝，若需重放应在匹配的旧代码/依赖环境执行。

@@ -1,8 +1,9 @@
 """The single assembly point for the supported Panda placement environment."""
-from vision_arm_lab.core.config import load_config
+from vision_arm_lab.simulation.config import load_config
 from vision_arm_lab.simulation.control import PandaActionAdapter
 from vision_arm_lab.core.environment import Environment
 from vision_arm_lab.tasks.placement import PlacementEvaluator
+from vision_arm_lab.simulation.scene_xml import scene_asset_fingerprint
 
 
 def make_environment(config, *, render_mode='offscreen') -> Environment:
@@ -39,6 +40,16 @@ def make_environment(config, *, render_mode='offscreen') -> Environment:
         backend, PlacementEvaluator(config.placement),
         lambda: read_placement_state(backend.env), config.spec, render_mode=render_mode,
     )
+
+
+def make_recorded_environment(metadata, *, render_mode='offscreen') -> Environment:
+    """Rebuild a recorded scene using its snapshot, after checking its assets."""
+    from vision_arm_lab.simulation.config import SceneConfig
+
+    snapshot = metadata['scene']
+    if metadata['scene_asset_sha256'] != scene_asset_fingerprint(snapshot['scene_xml']):
+        raise ValueError('Replay requires the recorded scene asset versions')
+    return make_environment(SceneConfig(**snapshot), render_mode=render_mode)
 
 
 def make_builtin_policy(name, environment):

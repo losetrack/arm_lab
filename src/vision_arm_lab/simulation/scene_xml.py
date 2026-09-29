@@ -1,4 +1,5 @@
 """Read the placement MJCF source without importing a physics or rendering backend."""
+from hashlib import sha256
 from importlib.resources import files
 from importlib.util import find_spec
 from pathlib import Path
@@ -19,6 +20,11 @@ def resolve_asset_file(value):
         package = Path(find_spec('robosuite').origin).parent
         return package / 'models/assets' / value.removeprefix('robosuite://')
     return Path(value)
+
+
+def scene_asset_fingerprint(xml):
+    return {node.get('file'): sha256(resolve_asset_file(node.get('file')).read_bytes()).hexdigest()
+            for node in ET.fromstring(xml).findall('asset/*[@file]')}
 
 
 def read_scene_xml(path=None):

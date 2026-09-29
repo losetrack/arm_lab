@@ -7,6 +7,19 @@ from vision_arm_lab.core.contracts import TaskResult
 
 
 @dataclass(frozen=True)
+class PlacementConfig:
+    cube_side_m: float
+    table_height_m: float
+    target_center_m: tuple[float, float]
+    target_size_m: tuple[float, float]
+    bottom_tolerance_m: float
+    linear_speed_limit_m_s: float
+    angular_speed_limit_rad_s: float
+    stable_duration_s: float
+    episode_timeout_s: float
+
+
+@dataclass(frozen=True)
 class ObjectState:
     """Privileged world-frame state for expert/evaluation channels only."""
 
@@ -18,7 +31,7 @@ class ObjectState:
 
 
 class PlacementEvaluator:
-    def __init__(self, config):
+    def __init__(self, config: PlacementConfig):
         self.config = config
         self.local_corners = np.array(list(product((-0.5, 0.5), repeat=3))) * config.cube_side_m
         self.reset()

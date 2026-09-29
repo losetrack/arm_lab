@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 import cv2
 import numpy as np
-from vision_arm_lab.core.contracts import PolicyFailure
+from vision_arm_lab.core.contracts import PolicyFailure, TaskInfo
 
 
 @dataclass(frozen=True)
@@ -21,12 +21,12 @@ class ColorLocator:
     required_inputs = frozenset({'rgb', 'depth', 'calibration'})
     required_priors = frozenset({'table_height', 'cube_size', 'color_range'})
 
-    def __init__(self, scene, config=VisionConfig()):
-        self.scene = scene
+    def __init__(self, task: TaskInfo, config=VisionConfig()):
+        self.task = task
         self.config = config
 
     def __call__(self, observation):
-        camera = observation.cameras[self.scene.camera_name]
+        camera = observation.cameras[self.task.camera_name]
         if camera.rgb is None or camera.depth_m is None:
             raise PolicyFailure('missing_rgbd')
         c = self.config
@@ -42,9 +42,9 @@ class ColorLocator:
         points = (camera.camera_to_world[:3, :3] @ points_camera).T + camera.camera_to_world[:3, 3]
         # Table and the fixed cube height distinguish the top face from side
         # faces and the red visualization site above the workspace.
-        top_z = self.scene.table_height_m + self.scene.cube_side_m
+        top_z = self.task.table_height_m + self.task.cube_side_m
         points = points[np.abs(points[:, 2] - top_z) <= c.top_tolerance_m]
         if len(points) < c.min_pixels:
             raise PolicyFailure('localization_failed')
         xy = np.median(points[:, :2], axis=0)
-        return np.r_[xy, self.scene.table_height_m + self.scene.cube_side_m / 2]
+        return np.r_[xy, self.task.table_height_m + self.task.cube_side_m / 2]

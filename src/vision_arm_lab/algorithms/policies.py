@@ -1,7 +1,7 @@
 """Shared grasp state machine; localization is the expert/vision difference."""
 from dataclasses import dataclass
 import numpy as np
-from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec, PolicyFailure
+from vision_arm_lab.core.contracts import Action, ActionChunk, ActionSpec, PolicyFailure, TaskInfo
 
 
 @dataclass(frozen=True)
@@ -26,8 +26,8 @@ class GraspPolicy:
     required_inputs = frozenset({"robot_state"})
     phases = ("settle", "approach", "descend", "close", "lift", "transfer", "lower", "release", "retreat", "wait")
 
-    def __init__(self, scene, locate, config=GraspConfig()):
-        self.scene = scene
+    def __init__(self, task: TaskInfo, locate, config=GraspConfig()):
+        self.task = task
         self.locate = locate
         self.config = config
         self.required_inputs = self.required_inputs | getattr(locate, 'required_inputs', frozenset())
@@ -80,9 +80,9 @@ class GraspPolicy:
             if self.phase in ("approach", "lift", "transfer", "retreat"):
                 target[2] += c.hover_m
             if self.phase in ("transfer", "lower", "retreat"):
-                target[:2] = self.scene.target_center_m
+                target[:2] = self.task.target_center_m
             if self.phase == "lower":
-                target[2] = self.scene.table_height_m + self.scene.cube_side_m / 2 + c.release_clearance_m
+                target[2] = self.task.table_height_m + self.task.cube_side_m / 2 + c.release_clearance_m
             difference = target - p
             delta = np.clip(difference, -self.action_spec.max_translation_per_axis_m, self.action_spec.max_translation_per_axis_m)
             timeout = c.motion_timeout_s
